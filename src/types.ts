@@ -39,11 +39,13 @@ export type ActivityContent =
   | { type: "response"; body: string }
   | { type: "error"; body: string };
 
-/** Plugin configuration (MVP) */
+/** Plugin configuration (OAuth) */
 export interface PluginConfig {
   webhookSecret: string;
-  linearApiKey: string;
-  agentId: string;
+  clientId: string;
+  clientSecret: string;
+  redirectUri: string;
+  tokenStorePath: string;
   defaultDir?: string;
 }
 
@@ -54,14 +56,23 @@ export function validateConfig(
   if (!raw) return null;
   const webhookSecret =
     typeof raw["webhookSecret"] === "string" ? raw["webhookSecret"] : "";
-  const linearApiKey =
-    typeof raw["linearApiKey"] === "string" ? raw["linearApiKey"] : "";
-  const agentId = typeof raw["agentId"] === "string" ? raw["agentId"] : "";
-  if (!webhookSecret || !linearApiKey || !agentId) return null;
+  const clientId =
+    typeof raw["clientId"] === "string" ? raw["clientId"] : "";
+  const clientSecret =
+    typeof raw["clientSecret"] === "string" ? raw["clientSecret"] : "";
+  const redirectUri =
+    typeof raw["redirectUri"] === "string" ? raw["redirectUri"] : "";
+  const tokenStorePath =
+    typeof raw["tokenStorePath"] === "string"
+      ? raw["tokenStorePath"]
+      : ".data/oauth-token.json";
+  if (!webhookSecret || !clientId || !clientSecret || !redirectUri) return null;
   return {
     webhookSecret,
-    linearApiKey,
-    agentId,
+    clientId,
+    clientSecret,
+    redirectUri,
+    tokenStorePath,
     defaultDir:
       typeof raw["defaultDir"] === "string" ? raw["defaultDir"] : undefined,
   };
