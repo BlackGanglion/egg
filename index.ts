@@ -126,6 +126,9 @@ app.get("/oauth/callback", async (c) => {
 // Webhook — delegate to Linear SDK handler (Fetch API)
 
 app.post("/webhooks/linear", async (c) => {
+  const contentLength = c.req.header("content-length") ?? "unknown";
+  logger.info(`Webhook request received: content-length=${contentLength}`);
+
   // Check auth before processing
   const agentId = await getAgentId();
   if (!agentId) {
@@ -135,7 +138,9 @@ app.post("/webhooks/linear", async (c) => {
     return c.text("Not authorized. Visit /oauth/authorize first.", 503);
   }
 
-  return await webhookHandler(c.req.raw);
+  const response = await webhookHandler(c.req.raw);
+  logger.info(`Webhook handler responded: status=${response.status}`);
+  return response;
 });
 
 // --- Start ---
