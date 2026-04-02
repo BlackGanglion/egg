@@ -1,5 +1,11 @@
 # 优化记录
 
+## 2026-04-03
+
+- **Langfuse Trace 查询工具** — 新增 `fetch_trace` tool，当 issue 描述中包含 `lab.gooo.ai` trace 链接时，LLM 可调用该工具获取 observations 数据，提取 tool 调用次数及异常信息，辅助更精准地判断问题类型和分配负责人
+- **LLM Tool Calling 支持** — 将 triage 的单次 LLM 调用改为 tool-calling 循环（最多 3 轮），基于 pi-ai 原生 tool 支持，LLM 可在 triage 过程中按需调用外部工具获取额外上下文
+- **工具注册机制** — 新建 `src/tool/` 目录，包含工具接口定义（`types.ts`）、工具注册表（`registry.ts`），支持后续扩展更多工具
+
 ## 2026-04-02
 
 - **Webhook 缺口检测与自动补漏** — 通过内存跟踪每个团队前缀的 issue 编号序列，当检测到编号跳跃时自动通过 API 拉取遗漏的 issue 并补跑 triage，所有缺口事件以 `[webhook-gap]` 前缀记录日志

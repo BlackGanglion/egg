@@ -25,3 +25,5 @@ prompts/
 log/
 test/log/
 
+tmp/
+

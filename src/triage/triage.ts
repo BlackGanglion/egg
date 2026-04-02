@@ -1,9 +1,10 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { complete } from "@mariozechner/pi-ai";
-import type { Model } from "@mariozechner/pi-ai";
+import type { Model, Message, ToolCall as PiAiToolCall } from "@mariozechner/pi-ai";
 import type { LinearApiClient } from "../linear/client";
 import type { PluginLogger } from "../webhook/logger-types";
+import { getToolDefinitions, getToolExecutor } from "../tool/registry";
 
 // --- Types ---
 
@@ -233,17 +234,15 @@ export class IssueTriage {
     return lines.join("\n");
   }
 
-  /** Call LLM to triage the issue */
+  /** Call LLM to triage the issue (with tool-calling loop) */
   async runTriage(context: IssueContext): Promise<TriageResult | null> {
+    const MAX_TOOL_ROUNDS = 3;
     const userPrompt = this.buildPrompt(context);
 
     // Extract and download images from description
     const imageUrls = extractImageUrls(context.description);
     const images: Array<{ type: "image"; mimeType: string; data: string }> = [];
     if (imageUrls.length > 0) {
-      this.logger.info(
-        `Triage ${context.identifier}: downloading ${imageUrls.length} image(s)`,
-      );
       const results = await Promise.all(
         imageUrls.map((url) => downloadImageAsBase64(url)),
       );
@@ -254,45 +253,109 @@ export class IssueTriage {
       }
     }
 
-    this.logger.info(
-      `Triage ${context.identifier}: calling ${this.llmConfig.model}`,
-    );
-
     // Build message content: text + images
     const content: Array<{ type: "text"; text: string } | { type: "image"; mimeType: string; data: string }> =
       [{ type: "text", text: userPrompt }, ...images];
 
-    try {
-      const response = await complete(this.model, {
-        systemPrompt: this.triagePrompt,
-        messages: [
-          { role: "user", content, timestamp: Date.now() },
-        ],
-      }, {
-        apiKey: this.llmConfig.apiKey,
-        onPayload: (payload) => ({
-          ...(payload as Record<string, unknown>),
-          response_format: { type: "json_object" },
-        }),
-      });
+    const tools = getToolDefinitions();
+    const messages: Message[] = [
+      { role: "user", content, timestamp: Date.now() },
+    ];
 
-      if (
-        response.stopReason === "error" ||
-        response.stopReason === "aborted"
-      ) {
-        this.logger.error(
-          `Triage LLM error: ${response.errorMessage ?? response.stopReason}`,
+    try {
+      for (let round = 0; round <= MAX_TOOL_ROUNDS; round++) {
+        const hasTools = tools.length > 0 && round < MAX_TOOL_ROUNDS;
+
+        const response = await complete(this.model, {
+          systemPrompt: this.triagePrompt,
+          messages,
+          ...(hasTools ? { tools } : {}),
+        }, {
+          apiKey: this.llmConfig.apiKey,
+          onPayload: (payload) => {
+            const p = payload as Record<string, unknown>;
+            // Only force JSON mode when not offering tools
+            if (!hasTools) {
+              return { ...p, response_format: { type: "json_object" } };
+            }
+            return p;
+          },
+        });
+
+        if (
+          response.stopReason === "error" ||
+          response.stopReason === "aborted"
+        ) {
+          this.logger.error(
+            `Triage LLM error: ${response.errorMessage ?? response.stopReason}`,
+          );
+          return null;
+        }
+
+        // If no tool calls, this is the final response
+        if (response.stopReason !== "toolUse") {
+          const text = response.content
+            .filter((c) => c.type === "text")
+            .map((c) => (c as { type: "text"; text: string }).text)
+            .join("");
+          this.logger.info(`Triage ${context.identifier} raw output:\n${text}`);
+          return this.parseResult(text);
+        }
+
+        // Handle tool calls
+        const toolCalls = response.content.filter(
+          (c): c is PiAiToolCall => c.type === "toolCall",
         );
-        return null;
+
+        if (toolCalls.length === 0) {
+          const text = response.content
+            .filter((c) => c.type === "text")
+            .map((c) => (c as { type: "text"; text: string }).text)
+            .join("");
+          this.logger.info(`Triage ${context.identifier} raw output:\n${text}`);
+          return this.parseResult(text);
+        }
+
+        // Push the assistant message into conversation history
+        messages.push(response);
+
+        // Execute each tool call and push results
+        for (const tc of toolCalls) {
+          const executor = getToolExecutor(tc.name);
+          if (!executor) {
+            messages.push({
+              role: "toolResult",
+              toolCallId: tc.id,
+              toolName: tc.name,
+              content: [{ type: "text", text: `Error: unknown tool "${tc.name}"` }],
+              isError: true,
+              timestamp: Date.now(),
+            });
+            continue;
+          }
+
+          const result = await executor(tc.arguments);
+          const resultText = result.content
+            .map((c) => ("text" in c ? c.text : "[image]"))
+            .join("");
+          this.logger.info(
+            `Triage ${context.identifier}: tool result for ${tc.name}: ${resultText}`,
+          );
+          messages.push({
+            role: "toolResult",
+            toolCallId: tc.id,
+            toolName: tc.name,
+            content: result.content,
+            isError: result.isError,
+            timestamp: Date.now(),
+          });
+        }
       }
 
-      const text = response.content
-        .filter((c) => c.type === "text")
-        .map((c) => (c as { type: "text"; text: string }).text)
-        .join("");
-
-      this.logger.info(`Triage ${context.identifier} raw output:\n${text}`);
-      return this.parseResult(text);
+      this.logger.warn(
+        `Triage ${context.identifier}: exceeded max tool rounds (${MAX_TOOL_ROUNDS})`,
+      );
+      return null;
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       this.logger.error(`Triage LLM error: ${msg}`);
