@@ -5,6 +5,7 @@ import type { Model, Message, ToolCall as PiAiToolCall } from "@mariozechner/pi-
 import type { LinearApiClient } from "../linear/client";
 import type { PluginLogger } from "../webhook/logger-types";
 import { getToolDefinitions, getToolExecutor } from "../tool/registry";
+import { SUBMIT_TRIAGE_TOOL_NAME } from "../tool/submit-triage";
 
 // --- Types ---
 
@@ -236,7 +237,7 @@ export class IssueTriage {
 
   /** Call LLM to triage the issue (with tool-calling loop) */
   async runTriage(context: IssueContext): Promise<TriageResult | null> {
-    const MAX_TOOL_ROUNDS = 3;
+    const MAX_TOOL_ROUNDS = 5;
     const userPrompt = this.buildPrompt(context);
 
     // Extract and download images from description
@@ -263,23 +264,13 @@ export class IssueTriage {
     ];
 
     try {
-      for (let round = 0; round <= MAX_TOOL_ROUNDS; round++) {
-        const hasTools = tools.length > 0 && round < MAX_TOOL_ROUNDS;
-
+      for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
         const response = await complete(this.model, {
           systemPrompt: this.triagePrompt,
           messages,
-          ...(hasTools ? { tools } : {}),
+          tools,
         }, {
           apiKey: this.llmConfig.apiKey,
-          onPayload: (payload) => {
-            const p = payload as Record<string, unknown>;
-            // Only force JSON mode when not offering tools
-            if (!hasTools) {
-              return { ...p, response_format: { type: "json_object" } };
-            }
-            return p;
-          },
         });
 
         if (
@@ -292,21 +283,11 @@ export class IssueTriage {
           return null;
         }
 
-        // If no tool calls, this is the final response
-        if (response.stopReason !== "toolUse") {
-          const text = response.content
-            .filter((c) => c.type === "text")
-            .map((c) => (c as { type: "text"; text: string }).text)
-            .join("");
-          this.logger.info(`Triage ${context.identifier} raw output:\n${text}`);
-          return this.parseResult(text);
-        }
-
-        // Handle tool calls
         const toolCalls = response.content.filter(
           (c): c is PiAiToolCall => c.type === "toolCall",
         );
 
+        // No tool calls — LLM didn't use submit tool, try parsing text as fallback
         if (toolCalls.length === 0) {
           const text = response.content
             .filter((c) => c.type === "text")
@@ -316,10 +297,31 @@ export class IssueTriage {
           return this.parseResult(text);
         }
 
-        // Push the assistant message into conversation history
+        // Check if submit_triage_result was called
+        const submitCall = toolCalls.find(
+          (tc) => tc.name === SUBMIT_TRIAGE_TOOL_NAME,
+        );
+        if (submitCall) {
+          const args = submitCall.arguments;
+          this.logger.info(
+            `Triage ${context.identifier} result:\n${JSON.stringify(args, null, 2)}`,
+          );
+          return {
+            shouldTriage: args["shouldTriage"] !== false,
+            assigneeId:
+              typeof args["assigneeId"] === "string" ? args["assigneeId"] : null,
+            priority:
+              typeof args["priority"] === "number" ? args["priority"] : 0,
+            labelIds: Array.isArray(args["labelIds"])
+              ? (args["labelIds"] as string[])
+              : [],
+            reason: typeof args["reason"] === "string" ? args["reason"] : "",
+          };
+        }
+
+        // Other tool calls — execute them
         messages.push(response);
 
-        // Execute each tool call and push results
         for (const tc of toolCalls) {
           const executor = getToolExecutor(tc.name);
           if (!executor) {
@@ -339,7 +341,7 @@ export class IssueTriage {
             .map((c) => ("text" in c ? c.text : "[image]"))
             .join("");
           this.logger.info(
-            `Triage ${context.identifier}: tool result for ${tc.name}: ${resultText}`,
+            `Triage ${context.identifier}: tool ${tc.name} result: ${resultText}`,
           );
           messages.push({
             role: "toolResult",

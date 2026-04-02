@@ -1,10 +1,11 @@
 import type { Tool as PiAiTool } from "@mariozechner/pi-ai";
 import type { TriageTool } from "./types";
 import { fetchTraceTool } from "./fetch-trace";
+import { submitTriageTool } from "./submit-triage";
 
-const tools: TriageTool[] = [fetchTraceTool];
+const tools: TriageTool[] = [fetchTraceTool, submitTriageTool];
 
-/** Get pi-ai Tool definitions for passing to Context.tools */
+/** Get all pi-ai Tool definitions for passing to Context.tools */
 export function getToolDefinitions(): PiAiTool[] {
   return tools.map((t) => t.definition);
 }

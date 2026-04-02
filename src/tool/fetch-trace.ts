@@ -73,11 +73,11 @@ export const fetchTraceTool: TriageTool = {
   definition: {
     name: "fetch_trace",
     description:
-      "Fetch trace details from lab.gooo.ai. Use this when the issue description contains a URL like https://lab.gooo.ai/project/{projectId}/traces/{traceId}. Returns information about what the trace involves (e.g., image processing, document analysis, webpage scraping) to help determine the right assignee.",
+      "从 lab.gooo.ai 获取 trace 详情。当 issue 描述中包含 https://lab.gooo.ai/project/{projectId}/traces/{traceId} 格式的链接时使用此工具，返回 trace 涉及的工具调用及异常信息，辅助判断问题类型和负责人。",
     parameters: Type.Object({
       url: Type.String({
         description:
-          "The full lab.gooo.ai trace URL, e.g. https://lab.gooo.ai/project/abc123/traces/def456",
+          "完整的 lab.gooo.ai trace 链接，如 https://lab.gooo.ai/project/abc123/traces/def456",
       }),
     }),
   },
