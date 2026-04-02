@@ -137,8 +137,10 @@ export const fetchTraceTool: TriageTool = {
       if (errors.length > 0) {
         const parts = errors.map((e) => `${e.tool} tool 出现异常: ${e.error}`);
         text = parts.join("\n");
-      } else {
+      } else if (toolSummary) {
         text = `调用了 ${toolSummary} tool，未发现异常`;
+      } else {
+        text = "该 trace 中未发现 tool 调用记录";
       }
 
       return {
