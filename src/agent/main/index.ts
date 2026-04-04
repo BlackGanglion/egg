@@ -70,7 +70,7 @@ export class MainAgent {
     // Send thought immediately (must respond within 10 seconds)
     await this.linearClient.createAgentActivity({
       agentSessionId: sessionId,
-      content: { type: "thought", body: "正在分析..." },
+      content: { type: "thought", body: "egg 的 CPU 正在疯狂旋转..." },
     });
 
     // 构建 prompt
