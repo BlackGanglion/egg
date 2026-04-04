@@ -14,6 +14,11 @@ import { registerWebhookRoutes } from "./src/routes/webhook";
 const config = loadConfig();
 const logger = createLogger("log");
 
+process.on("unhandledRejection", (reason) => {
+  const msg = reason instanceof Error ? reason.message : String(reason);
+  logger.error(`[unhandledRejection] ${msg}`);
+});
+
 // --- OAuth config ---
 
 const oauthConfig: OAuthConfig = {

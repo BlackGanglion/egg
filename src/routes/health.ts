@@ -3,6 +3,7 @@ import {
   getAccessToken,
   type OAuthConfig,
 } from "../infra/linear/oauth";
+import { webhookStats } from "./webhook";
 
 export function registerHealthRoutes(app: Hono, oauthConfig: OAuthConfig) {
   app.get("/health", (c) => c.json({ ok: true }));
@@ -12,6 +13,11 @@ export function registerHealthRoutes(app: Hono, oauthConfig: OAuthConfig) {
     return c.json({
       authorized: !!token,
       agentId: token?.agentId ?? null,
+      webhook: {
+        count: webhookStats.count,
+        errors: webhookStats.errors,
+        lastReceivedAt: webhookStats.lastReceivedAt,
+      },
     });
   });
 }

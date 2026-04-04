@@ -9,6 +9,13 @@ import type { Logger } from "../utils/logger";
 /** Track last seen issue number per team prefix to detect missed webhooks */
 const lastSeenNumber = new Map<string, number>();
 
+/** Webhook statistics for monitoring */
+export const webhookStats = {
+  count: 0,
+  errors: 0,
+  lastReceivedAt: null as string | null,
+};
+
 function parseIdentifier(identifier: string): { prefix: string; number: number } | null {
   const match = identifier.match(/^([A-Z]+)-(\d+)$/);
   if (!match) return null;
@@ -85,15 +92,26 @@ export function registerWebhookRoutes(
   );
 
   app.post("/webhooks/linear", async (c) => {
+    webhookStats.count++;
+    webhookStats.lastReceivedAt = new Date().toISOString();
+
     const token = await getAccessToken(oauthConfig);
     if (!token) {
+      webhookStats.errors++;
       logger.warn(
         "Webhook received but no OAuth token available. Please authorize first.",
       );
       return c.text("Not authorized. Visit /oauth/authorize first.", 503);
     }
 
-    const response = await webhookHandler(c.req.raw);
-    return response;
+    try {
+      const response = await webhookHandler(c.req.raw);
+      return response;
+    } catch (err: unknown) {
+      webhookStats.errors++;
+      const msg = err instanceof Error ? err.message : String(err);
+      logger.error(`[webhook] Handler error: ${msg}`);
+      return c.text("Webhook processing error", 500);
+    }
   });
 }
