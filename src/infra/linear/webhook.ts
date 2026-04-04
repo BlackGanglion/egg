@@ -1,9 +1,13 @@
 import { LinearWebhookClient } from "@linear/sdk/webhooks";
-import type { EntityWebhookPayloadWithIssueData } from "@linear/sdk";
+import type {
+  EntityWebhookPayloadWithIssueData,
+  AgentSessionEventWebhookPayload,
+} from "@linear/sdk";
 import type { Logger } from "../../utils/logger";
 
 export interface WebhookCallbacks {
   onIssueCreated?: (payload: EntityWebhookPayloadWithIssueData) => void;
+  onAgentSessionEvent?: (payload: AgentSessionEventWebhookPayload) => void;
 }
 
 /**
@@ -25,6 +29,13 @@ export function createWebhookHandler(
       );
       callbacks.onIssueCreated?.(payload);
     }
+  });
+
+  handler.on("AgentSessionEvent", (payload) => {
+    logger.info(
+      `AgentSessionEvent: action=${payload.action} sessionId=${payload.agentSession.id}`,
+    );
+    callbacks.onAgentSessionEvent?.(payload);
   });
 
   return handler;

@@ -86,4 +86,20 @@ export class LinearApiClient {
     const client = await this.ensure();
     return client.createComment({ issueId, body });
   }
+
+  /** Send an activity to an agent session */
+  async createAgentActivity(
+    input: Parameters<LinearClient["createAgentActivity"]>[0],
+  ) {
+    const client = await this.ensure();
+    return client.createAgentActivity(input);
+  }
+
+  /** Fetch agent session activities (conversation history) */
+  async getSessionActivities(sessionId: string) {
+    const client = await this.ensure();
+    const session = await client.agentSession(sessionId);
+    const activities = await session.activities();
+    return activities.nodes;
+  }
 }

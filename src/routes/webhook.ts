@@ -3,6 +3,7 @@ import { createWebhookHandler } from "../infra/linear/webhook";
 import { getAccessToken, type OAuthConfig } from "../infra/linear/oauth";
 import type { LinearApiClient } from "../infra/linear/client";
 import type { AgentRegistry } from "../agent/registry";
+import type { MainAgent } from "../agent/main";
 import type { Logger } from "../utils/logger";
 
 /** Track last seen issue number per team prefix to detect missed webhooks */
@@ -20,6 +21,7 @@ export function registerWebhookRoutes(
   oauthConfig: OAuthConfig,
   registry: AgentRegistry,
   linearClient: LinearApiClient,
+  mainAgent: MainAgent,
   logger: Logger,
 ) {
   async function handleMissedIssues(prefix: string, from: number, to: number) {
@@ -74,6 +76,9 @@ export function registerWebhookRoutes(
         if (triageAgent) {
           void triageAgent.invoke({ issueId });
         }
+      },
+      onAgentSessionEvent: (payload) => {
+        void mainAgent.handleSessionEvent(payload);
       },
     },
     logger,

@@ -6,6 +6,7 @@ import { getAccessToken, type OAuthConfig } from "./src/infra/linear/oauth";
 import { LinearApiClient } from "./src/infra/linear/client";
 import { AgentRegistry } from "./src/agent/registry";
 import { createLinearTriageAgent } from "./src/agent/sub/linear-triage";
+import { MainAgent } from "./src/agent/main";
 import { registerHealthRoutes } from "./src/routes/health";
 import { registerOAuthRoutes } from "./src/routes/oauth";
 import { registerWebhookRoutes } from "./src/routes/webhook";
@@ -39,17 +40,23 @@ async function getToken(): Promise<string> {
 
 const linearClient = new LinearApiClient(getToken);
 
+const llmConfig = {
+  baseUrl: config.llmBaseUrl,
+  model: config.llmModel,
+  apiKey: config.llmApiKey,
+};
+
 // --- Agent registry ---
 
 const registry = new AgentRegistry();
 
 registry.register(
-  createLinearTriageAgent(linearClient, {
-    baseUrl: config.llmBaseUrl,
-    model: config.llmModel,
-    apiKey: config.llmApiKey,
-  }, logger),
+  createLinearTriageAgent(linearClient, llmConfig, logger),
 );
+
+// --- Main agent ---
+
+const mainAgent = new MainAgent(linearClient, llmConfig, logger);
 
 // --- Hono app ---
 
@@ -57,7 +64,7 @@ const app = new Hono();
 
 registerHealthRoutes(app, oauthConfig);
 registerOAuthRoutes(app, oauthConfig, logger);
-registerWebhookRoutes(app, config.webhookSecret, oauthConfig, registry, linearClient, logger);
+registerWebhookRoutes(app, config.webhookSecret, oauthConfig, registry, linearClient, mainAgent, logger);
 
 // --- Start ---
 
