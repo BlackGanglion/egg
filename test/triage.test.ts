@@ -269,5 +269,5 @@ describe("IssueTriage", () => {
 
     console.log("\n--- Partial Triage Result ---");
     console.log("updateIssue:", JSON.stringify(update.input, null, 2));
-  }, 60_000);
+  }, 120_000);
 });

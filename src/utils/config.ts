@@ -11,7 +11,7 @@ interface ProviderDefaults {
 const PROVIDER_DEFAULTS: Record<LLMProvider, ProviderDefaults> = {
   moonshot: {
     baseUrl: "https://api.moonshot.cn/v1",
-    model: "kimi-k2.5",
+    model: "kimi-k2.6",
     envPrefix: "MOONSHOT",
   },
   claude: {
