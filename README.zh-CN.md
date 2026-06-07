@@ -2,116 +2,90 @@
 
 # egg
 
-LLM 驱动的工作自动化 Agent，采用主子 agent 架构。
+LLM 驱动的工作自动化 Agent，基于主 agent + 子 agent 架构，并使用 Codex runtime。
 
-当前支持 Linear Issue 自动分诊 — 当新 Issue 创建时，自动收集上下文，调用 LLM 分析，并将分诊结果（优先级、标签、指派）回写到 Linear。
+## 当前状态
 
-## 功能
+- Direct chat 入口已接入 `MainAgent` 和 `CodexRunner`
+- 对话上下文由 Codex thread 托管；Egg 只保存 session 映射和后台 trace 投影
+- React/Vite 前端已接入 Direct chat 和管理后台
+- 管理后台可查看 session、trace 消息、工具调用和来源，并支持删除 session
+- Linear 子 agent 边界已搭好；Linear OAuth/Webhook/API 写回仍需按新架构重建
 
-- **Agent 架构**：主子 agent 模式，通过 `SubAgent` 接口扩展
-- **OAuth 认证**：Linear OAuth 2.0 流程，自动刷新 Token
-- **Webhook 接收**：监听 Linear Webhook，通过 Linear SDK 验证签名
-- **Issue 自动分诊**：收集 Issue 上下文 → LLM 分析 → 自动设置优先级 / 标签 / 指派
-
-## 快速开始
+## 命令
 
 ```bash
-git clone <repo-url> egg
-cd egg
-npm install
-cp .env.example .env
-# 编辑 .env 填入凭证
-npm run dev
-
-# 通过 Tailscale Funnel 暴露本地服务（后台模式）
-tailscale funnel --bg 3000
-# 验证 Funnel 正在运行
-tailscale serve status
+npm run dev        # tsx --watch bootstrap.ts
+npm run dev:api    # tsx --watch bootstrap.ts
+npm run dev:web    # Vite 前端 dev server
+npm run dev:all    # 同时启动后端和前端 dev server
+npm run build:web  # 构建 React 前端到 src/web/dist
+npm start          # tsx bootstrap.ts
+npm run typecheck  # 后端 + 前端 TypeScript 检查
+npm test           # 当前暂无测试
 ```
 
-## 配置
+## 环境变量
 
-所有配置通过环境变量（支持 `.env` 文件）：
+所有配置通过环境变量（支持 `.env` 文件）。
 
 | 变量 | 必填 | 说明 |
 |------|------|------|
-| `LINEAR_WEBHOOK_SECRET` | 是 | Linear Webhook 签名密钥（HMAC-SHA256） |
-| `LINEAR_CLIENT_ID` | 是 | Linear OAuth 应用 Client ID |
-| `LINEAR_CLIENT_SECRET` | 是 | Linear OAuth 应用 Client Secret |
-| `LINEAR_REDIRECT_URI` | 是 | OAuth 回调地址（须与 Linear 应用配置一致） |
-| `PORT` | 否 | 服务端口（默认 `3000`） |
-| `LLM_PROVIDER` | 否 | LLM 提供商：`moonshot` 或 `claude`（默认 `moonshot`） |
-| `LLM_BASE_URL` | 否 | LLM API 地址 |
-| `LLM_MODEL` | 否 | LLM 模型名称 |
-| `LLM_API_KEY` | 是 | LLM API Key |
+| `PORT` | 否 | 服务端口，默认 `3000` |
+| `AGENT_SESSIONS_ROOT` | 否 | 每个 session 独立存储的根目录，默认 `.data/sessions` |
+| `AGENT_SESSION_STORE_PATH` | 否 | 覆盖 session metadata 存储根目录 |
+| `SESSION_TRACE_STORE_PATH` | 否 | 覆盖后台 trace 存储根目录 |
+| `CODEX_MODEL` | 否 | Codex 模型覆盖 |
+| `CODEX_WORKING_DIRECTORY` | 否 | 传给 Codex 的工作目录，默认当前进程 cwd |
+| `CODEX_SANDBOX_MODE` | 否 | `read-only`、`workspace-write` 或 `danger-full-access`，默认 `read-only` |
+| `CODEX_REASONING_EFFORT` | 否 | `minimal`、`low`、`medium`、`high` 或 `xhigh` |
+| `CODEX_NETWORK_ACCESS` | 否 | 是否允许 Codex 网络访问，默认 `false` |
+| `CODEX_MAX_CONCURRENT_RUNS` | 否 | Codex run 全局并发上限，默认 `2` |
 
-## Linear 侧设置
+Codex 认证由 Codex runtime/CLI 环境负责，不再使用旧的 Moonshot/Claude 环境变量。
 
-1. 确保你的 Linear 账号拥有 **Admin** 权限（创建 OAuth 应用需要管理员权限）
-2. 在 Linear Settings → API → OAuth applications 中创建 OAuth 应用
-2. 回调地址填写 `https://<your-host>/oauth/callback`
-3. 在 Linear Settings → API → Webhooks 中创建 Webhook
-4. URL 填写 `https://<your-host>/webhooks/linear`
-5. 勾选 **Issues** 事件，将 Signing Secret 填入 `LINEAR_WEBHOOK_SECRET`
-6. 启动服务后访问 `/oauth/authorize` 完成 OAuth 授权
-
-## API 端点
+## API
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
 | `GET` | `/health` | 健康检查 |
-| `GET` | `/status` | 认证状态与 Agent ID |
-| `GET` | `/oauth/authorize` | 发起 Linear OAuth 授权 |
-| `GET` | `/oauth/callback` | OAuth 回调处理 |
-| `POST` | `/webhooks/linear` | Linear Webhook 接收 |
+| `GET` | `/chat` | Direct chat 页面 |
+| `GET` | `/admin` | session/trace 管理后台 |
+| `POST` | `/api/direct-chat/sessions` | 创建 direct chat session |
+| `POST` | `/api/direct-chat/messages` | 发送 direct chat 消息 |
+| `POST` | `/api/direct-chat/messages/stream` | 通过 SSE 流式发送 direct chat 消息 |
+| `GET` | `/api/admin/sessions` | 查看 session 列表 |
+| `GET` | `/api/admin/sessions/:agentSessionId` | 查看 session 和 trace 详情 |
+| `DELETE` | `/api/admin/sessions/:agentSessionId` | 删除 session |
 
 ## 项目结构
 
-```
-bootstrap.ts                    # 入口：Hono 服务
+```text
+bootstrap.ts
+prompts/
+  main-agent.md                  # MainAgent prompt
 src/
   agent/
-    types.ts                    # SubAgent 接口
-    registry.ts                 # Agent 注册表
-    main/                       # 主 agent（预留）
-    sub/
-      linear-triage/            # 子 agent：Linear issue 分诊
-        index.ts                # SubAgent 实现
-        triage.ts               # 分诊逻辑（上下文收集 → LLM → 应用结果）
-    tool/
-      fetch-trace.ts            # Langfuse trace 工具
-      submit-triage.ts          # 分诊结果提交工具
-  infra/
-    linear/
-      client.ts                 # Linear API 客户端封装
-      oauth.ts                  # OAuth 2.0 流程
-      webhook.ts                # Webhook 签名验证
-  utils/
-    config.ts                   # 环境变量加载
-    logger.ts                   # 文件 + 控制台日志
-  routes/
-    health.ts                   # 健康检查路由
-    oauth.ts                    # OAuth 路由
-    webhook.ts                  # Webhook 路由
-prompts/
-  triage.md                     # 分诊系统提示词
+    main/                       # MainAgent
+    runtime/                    # CodexRunner, RunCoordinator
+    session/                    # AgentSessionStore, SessionTraceStore
+    sub/linear/                 # Linear 子 agent 骨架和 workspace
+    tool/                       # 项目工具合同
+  integration/
+    direct-chat/                # Direct chat bridge
+    linear-agent/               # Linear envelope bridge 骨架
+  routes/                       # Hono API 路由和前端构建产物托管
+  utils/                        # 配置、日志
+  web/
+    src/                        # React/Vite 前端
 ```
 
-## 技术栈
+## 开发说明
 
-- **[Hono](https://hono.dev/)** — HTTP 服务
-- **[@linear/sdk](https://developers.linear.app/docs/sdk/getting-started)** — Linear TypeScript SDK
-- **[@mariozechner/pi-agent-core](https://github.com/badlogic/pi-mono)** — Agent 框架
-- **[@mariozechner/pi-ai](https://github.com/badlogic/pi-mono)** — LLM 调用（OpenAI 兼容）
-- **TypeScript** + **tsx** — 无需构建
-
-## 开发
-
-```bash
-npm run dev        # 开发模式（带 watch）
-npm run typecheck  # 类型检查
-```
-
-## License
-
-Private
+- Direct chat 不是子 agent，而是主 agent 的默认对话路径。
+- MainAgent prompt 存放在 `prompts/main-agent.md`，不直接写在代码里。
+- 子 agent 表示领域能力，后续应作为 tool 暴露给主 agent。
+- Egg 不把本地聊天记录回放给 Codex；上下文恢复依赖 `codexThreadId`。
+- 后台 trace 只是展示投影：`.data/sessions/<agentSessionId>/trace.json`。
+- Chat 流式协议通过 `/api/direct-chat/messages/stream` 输出 SSE。
+- `@assistant-ui/react` 已作为开源 chat UI 候选依赖接入；当前 UI 先直接消费 Egg 自定义 SSE，后续再补专用 runtime adapter。

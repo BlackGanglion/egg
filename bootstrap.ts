@@ -2,78 +2,78 @@ import { Hono } from "hono";
 import { serve } from "@hono/node-server";
 import { loadConfig } from "./src/utils/config";
 import { createLogger } from "./src/utils/logger";
-import { getAccessToken, type OAuthConfig } from "./src/infra/linear/oauth";
-import { LinearApiClient } from "./src/infra/linear/client";
 import { AgentRegistry } from "./src/agent/registry";
-import { createLinearTriageAgent } from "./src/agent/sub/linear-triage";
 import { MainAgent } from "./src/agent/main";
+import { AgentSessionStore } from "./src/agent/session/session-store";
+import { SessionTraceStore } from "./src/agent/session/session-trace-store";
+import { CodexRunner } from "./src/agent/runtime/codex-runner";
+import { RunCoordinator } from "./src/agent/runtime/run-coordinator";
+import { LinearSubAgent } from "./src/agent/sub/linear";
+import { LinearAgentBridge } from "./src/integration/linear-agent/bridge";
+import type {
+  LinearAgentSessionEnvelope,
+  LinearIssueCreatedEnvelope,
+} from "./src/integration/linear-agent/types";
+import { DirectChatBridge } from "./src/integration/direct-chat/bridge";
 import { registerHealthRoutes } from "./src/routes/health";
-import { registerOAuthRoutes } from "./src/routes/oauth";
-import { registerWebhookRoutes } from "./src/routes/webhook";
+import { registerDirectChatRoutes } from "./src/routes/direct-chat";
+import { registerAdminRoutes } from "./src/routes/admin";
+import { registerUiRoutes } from "./src/routes/ui";
+import type { AgentTask } from "./src/agent/types";
 
 const config = loadConfig();
-const logger = createLogger("log");
-
-process.on("unhandledRejection", (reason) => {
-  const msg = reason instanceof Error ? reason.message : String(reason);
-  logger.error(`[unhandledRejection] ${msg}`);
-});
-
-// --- OAuth config ---
-
-const oauthConfig: OAuthConfig = {
-  clientId: config.clientId,
-  clientSecret: config.clientSecret,
-  redirectUri: config.redirectUri,
-  webhookSecret: config.webhookSecret,
-  tokenStorePath: config.tokenStorePath,
-};
-
-// --- Token provider ---
-
-async function getToken(): Promise<string> {
-  const result = await getAccessToken(oauthConfig);
-  if (!result) {
-    throw new Error(
-      "No valid OAuth token. Please authorize first via /oauth/authorize",
-    );
-  }
-  return result.accessToken;
-}
-
-// --- Shared services ---
-
-const linearClient = new LinearApiClient(getToken);
-
-const llmConfig = {
-  baseUrl: config.llmBaseUrl,
-  model: config.llmModel,
-  apiKey: config.llmApiKey,
-};
-
-// --- Agent registry ---
+const logger = createLogger();
 
 const registry = new AgentRegistry();
+const sessionStore = new AgentSessionStore(config.agentSessionStorePath);
+const sessionTraceStore = new SessionTraceStore(config.sessionTraceStorePath);
+const codexRunner = new CodexRunner({
+  model: config.codexModel,
+  workingDirectory: config.codexWorkingDirectory,
+  sandboxMode: config.codexSandboxMode,
+  modelReasoningEffort: config.codexReasoningEffort,
+  networkAccessEnabled: config.codexNetworkAccessEnabled,
+});
+registry.register(new LinearSubAgent());
 
-registry.register(
-  createLinearTriageAgent(linearClient, llmConfig, logger),
-);
-
-// --- Main agent ---
-
-const mainAgent = new MainAgent(linearClient, registry, llmConfig, logger);
-
-// --- Hono app ---
+const mainAgent = new MainAgent(registry, {
+  sessionTraceStore,
+  codexRunner,
+  sessionStore,
+});
+const runCoordinator = new RunCoordinator({
+  maxConcurrentRuns: config.codexMaxConcurrentRuns,
+});
+const linearBridge = new LinearAgentBridge(mainAgent, sessionStore, runCoordinator);
+const directChatBridge = new DirectChatBridge(mainAgent, sessionStore, runCoordinator);
 
 const app = new Hono();
 
-registerHealthRoutes(app, oauthConfig);
-registerOAuthRoutes(app, oauthConfig, logger);
-registerWebhookRoutes(app, config.webhookSecret, oauthConfig, registry, linearClient, mainAgent, logger, config.triageMinIssueNumber);
+registerUiRoutes(app);
+registerHealthRoutes(app, registry, runCoordinator);
+registerDirectChatRoutes(app, directChatBridge, sessionStore, sessionTraceStore);
+registerAdminRoutes(app, sessionStore, sessionTraceStore);
 
-// --- Start ---
+app.post("/agent/tasks", async (c) => {
+  const task = await c.req.json<AgentTask>();
+  const result = await mainAgent.dispatch(task, {
+    externalSession: task.externalSession,
+  });
+  return c.json(result);
+});
+
+app.post("/integrations/linear/issues", async (c) => {
+  const envelope = await c.req.json<LinearIssueCreatedEnvelope>();
+  const result = await linearBridge.handleIssueCreated(envelope);
+  return c.json(result);
+});
+
+app.post("/integrations/linear/sessions", async (c) => {
+  const envelope = await c.req.json<LinearAgentSessionEnvelope>();
+  const result = await linearBridge.handleAgentSessionEvent(envelope);
+  return c.json(result);
+});
 
 serve({ fetch: app.fetch, port: config.port }, () => {
-  logger.info(`egg server listening on http://localhost:${config.port}`);
-  logger.info(`LLM: ${config.llmBaseUrl} / ${config.llmModel}`);
+  logger.info(`egg v2 scaffold listening on http://localhost:${config.port}`);
 });

@@ -381,32 +381,32 @@ export interface EggTool<TParams = unknown, TResult = unknown> {
 
 ### Phase 4：配置和依赖清理
 
-1. 移除 `@mariozechner/pi-agent-core`、`@mariozechner/pi-ai`、`@mariozechner/pi-coding-agent`。
-2. 移除 Moonshot/Kimi 配置：
+1. 已移除 `@mariozechner/pi-agent-core`、`@mariozechner/pi-ai`、`@mariozechner/pi-coding-agent`。
+2. 已移除 Moonshot/Kimi 配置：
    - `LLM_PROVIDER`
    - `MOONSHOT_*`
+   - Claude provider env
    - OpenAI-compatible `baseUrl` 默认值
-3. 新增 Codex 配置，候选命名：
-   - `OPENAI_API_KEY`
+3. 已新增 Codex 配置：
    - `CODEX_MODEL`
-   - `CODEX_SANDBOX`
-   - `CODEX_WORKSPACE`
-   - `AGENT_WORKSPACE_ROOT`
+   - `CODEX_WORKING_DIRECTORY`
+   - `CODEX_SANDBOX_MODE`
+   - `CODEX_REASONING_EFFORT`
+   - `CODEX_NETWORK_ACCESS`
    - `CODEX_MAX_CONCURRENT_RUNS`
-   - `CODEX_RUN_TIMEOUT_MS`
+   - `AGENT_SESSIONS_ROOT`
    - `AGENT_SESSION_STORE_PATH`
-4. 更新 `README.md`、`README.zh-CN.md`、`AGENTS.md`、`docs/design/architecture.md`、`docs/design/data-flow.md`、`docs/design/tools-spec.md`。
-5. 在 `history.md` 记录 V2 runtime 迁移。
+   - `SESSION_TRACE_STORE_PATH`
+4. 已更新 `README.md`、`README.zh-CN.md`、`AGENTS.md`、`docs/design/architecture.md`、`docs/design/data-flow.md`、`docs/design/tools-spec.md`。
+5. 已在 `history.md` 记录 V2 runtime 迁移。
 
 ### Phase 5：验证
 
 1. 静态检查：
    - `npm run typecheck`
 2. 单元测试：
-   - `npm test -- --run test/filter.test.ts`
    - 新增的 runtime/tool adapter 单测
-3. 手动确认后再跑真实 LLM 集成测试：
-   - `npm test -- --run test/triage.test.ts`
+3. 手动确认后再跑真实 Codex/Linear 集成测试。
 4. 手动验收：
    - 新建 Linear issue 可触发分诊。
    - 已分配 issue 跳过分诊。

@@ -1,31 +1,84 @@
-import type { AgentTool } from "@mariozechner/pi-agent-core";
+export type AgentTaskType =
+  | "linear.issue.triage"
+  | "linear.session.prompt"
+  | "direct-chat.message"
+  | (string & {});
 
-/**
- * Sub-agent definition. Each sub-agent is:
- * 1. Directly invocable via webhook or programmatic trigger
- * 2. Wrappable as an AgentTool for the main agent
- */
-export interface SubAgent {
-  /** Unique name, e.g. "linear-triage" */
-  name: string;
+export type ExternalSessionSource = "linear" | "direct-chat" | (string & {});
 
-  /** Human-readable description */
-  description: string;
+export type ExternalSessionScope =
+  | "issue"
+  | "agent-session"
+  | "conversation"
+  | (string & {});
 
-  /**
-   * Direct invocation — webhook or programmatic trigger.
-   * Each agent defines its own input shape.
-   */
-  invoke(input: Record<string, unknown>): Promise<SubAgentResult>;
-
-  /**
-   * Convert this sub-agent into an AgentTool for the main agent.
-   */
-  asTool(): AgentTool;
+export interface ExternalSessionRef {
+  source: ExternalSessionSource;
+  scope: ExternalSessionScope;
+  externalSessionId: string;
+  externalTurnId?: string;
 }
 
-export interface SubAgentResult {
-  success: boolean;
+export interface AgentTask<TInput extends Record<string, unknown> = Record<string, unknown>> {
+  id: string;
+  type: AgentTaskType;
+  input: TInput;
+  intent?: string;
+  capabilities?: string[];
+  externalSession?: ExternalSessionRef;
+  metadata?: Record<string, unknown>;
+}
+
+export type AgentResultStatus = "completed" | "failed" | "skipped" | "needs_input";
+
+export interface AgentResult<TData = unknown> {
+  status: AgentResultStatus;
   message: string;
-  details?: unknown;
+  data?: TData;
+  commands?: AgentWriteCommand[];
+}
+
+export type AgentWriteCommand = LinearWriteCommand | ChatWriteCommand;
+
+export interface LinearWriteCommand {
+  target: "linear";
+  kind: "activity" | "issue-update" | "comment";
+  issueId?: string;
+  agentSessionId?: string;
+  body?: string;
+  payload?: Record<string, unknown>;
+}
+
+export interface ChatWriteCommand {
+  target: "direct-chat";
+  conversationId: string;
+  body: string;
+  payload?: Record<string, unknown>;
+}
+
+export interface AgentDispatchContext {
+  externalSession?: ExternalSessionRef;
+  agentSessionId?: string;
+  codexThreadId?: string;
+  signal?: AbortSignal;
+  metadata?: Record<string, unknown>;
+}
+
+export type WorkspaceAccess = "read-only" | "workspace-write" | "danger-full-access";
+
+export interface SubAgentWorkspace {
+  workspacePath: string;
+  promptPath?: string;
+  evalsPath?: string;
+  notesPath?: string;
+  access: WorkspaceAccess;
+}
+
+export interface SubAgent {
+  name: string;
+  description: string;
+  capabilities: string[];
+  workspace?: SubAgentWorkspace;
+  canHandle(task: AgentTask): boolean;
+  invoke(task: AgentTask, context: AgentDispatchContext): Promise<AgentResult>;
 }

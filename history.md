@@ -2,7 +2,20 @@
 
 ## 2026-06-07
 
+- **V2 agent 架构骨架初始化** — 将旧 `src/` 实现移动到根目录 `legacy/`，重新创建 `src/agent`、`src/integration`、`src/routes` 和 `src/utils` 的 V2 骨架；新增 `AgentTask` / `AgentResult` / `SubAgent` 合同、`MainAgent.dispatch()`、`AgentRegistry`、`AgentSessionStore`、`RunCoordinator`、`CodexRunner` 适配层占位、Linear/direct-chat bridge，以及 `linear` 子 agent workspace
 - **Linear 读写归属修正** — 更新 `docs/design/codex-sdk-migration-plan.md`，明确 Linear adapter/bridge 只处理 webhook envelope、session 映射和主 agent 入口，所有 Linear API 读取与写回都收敛到 `linear` 子 agent；`linear.issue.triage` 由主 agent 分发给 `linear` 子 agent 执行
+- **Direct chat Codex runtime 接入** — 引入 `@openai/codex-sdk`，将 `CodexRunner` 从占位改为 SDK thread/run 适配层；普通 Direct chat 由主 agent 直接按 `agentSessionId` 复用 `codexThreadId`，并将 Codex run、命令执行、MCP 调用、web search、file change 等事件写入 session trace
+- **主 agent / 子 agent 边界修正** — 移除 `DirectChatSubAgent`，明确 direct chat 是主 agent 的默认对话链路；子 agent 只表示领域能力，后续由主 agent 作为 tool 调用，例如 Linear
+- **Codex 托管上下文边界修正** — 将 `ChatContextStore` 改为 `SessionTraceStore`，明确 Egg 只保存后台展示用 trace 投影；会话上下文由 Codex thread 托管，Egg 不再把本地聊天记录作为上下文源，新落盘文件为 `trace.json`，不保留旧 `context.json` 兼容
+- **session 文件夹化存储与后台查看** — `AgentSessionStore` 和 `SessionTraceStore` 改为 `.data/sessions/<agentSessionId>/session.json` / `trace.json` 独立落盘；新增 Direct chat 页面和管理后台，可新建 session、发送消息、查看来源/trace/工具调用并删除 session
+- **legacy 代码清理** — 删除根目录 `legacy/`、旧批量 triage 脚本和依赖 legacy 的旧测试；移除不再使用的 `@mariozechner/pi-*` runtime 依赖和 `npm run triage` 脚本
+- **package 依赖精简** — `package.json` 只保留当前新架构实际使用的依赖：Hono、Codex SDK、dotenv、tsx、TypeScript 和 Node 类型；移除尚未接入的 `@linear/sdk`、无测试支撑的 `vitest` 和未配置脚本的 `prettier`
+- **Direct chat 流式协议** — 新增 `/api/direct-chat/messages/stream` SSE 入口，基于 Codex SDK `runStreamed()` 输出 `thread.started`、`message.delta`、`tool_call`、`turn.completed`、`done` 等事件，并保留原非流式 JSON 接口
+- **前后端分离改造** — 新增 React + Vite 前端工作区 `src/web/`，将 Direct chat 和 Admin 后台改为独立前端页面；Direct chat 直接消费 SSE 流式协议，Admin 支持查看 session 来源、trace、工具调用并删除 session；引入 `@assistant-ui/react` 作为后续 chat UI/runtime adapter 候选
+- **MainAgent prompt 外置** — 新增 `prompts/main-agent.md`，`MainAgent` 运行时读取该文件并拼接来源、conversationId 和用户消息，代码中不再内联主 agent 行为 prompt
+- **Chat 默认恢复最近 session** — Chat 页面加载时不再自动创建 session，改为读取最近一个 direct-chat session 并恢复 trace 消息；没有历史 session 时保持空态，需手动点击 New 创建
+- **Direct chat 历史切换** — 新增 direct-chat session 列表接口，Chat 左侧展示 direct chat 历史，默认选中最近 session，支持点击切换并恢复对应 trace 消息和工具事件
+- **Codex 中间事件展示增强** — Chat 页面解析 Codex `item.*` 事件，展示 web search query、command 输出、MCP tool 参数/结果、todo list、file change、reasoning summary 和 assistant message 更新，并按 runtime item id 合并刷新事件状态
 
 ## 2026-06-03
 

@@ -1,7 +1,7 @@
-import type { SubAgent } from "./types";
+import type { AgentTask, SubAgent } from "./types";
 
 export class AgentRegistry {
-  private agents = new Map<string, SubAgent>();
+  private readonly agents = new Map<string, SubAgent>();
 
   register(agent: SubAgent): void {
     this.agents.set(agent.name, agent);
@@ -15,8 +15,14 @@ export class AgentRegistry {
     return [...this.agents.values()];
   }
 
-  /** Get all sub-agents as AgentTools (for main agent) */
-  asTools() {
-    return this.all().map((a) => a.asTool());
+  findForTask(task: AgentTask): SubAgent[] {
+    return this.all().filter((agent) => agent.canHandle(task));
+  }
+
+  describeCapabilities(): Array<{ name: string; capabilities: string[] }> {
+    return this.all().map((agent) => ({
+      name: agent.name,
+      capabilities: agent.capabilities,
+    }));
   }
 }

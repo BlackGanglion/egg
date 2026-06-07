@@ -2,116 +2,90 @@
 
 # egg
 
-A work automation agent powered by LLM, built with a main-agent + sub-agent architecture.
+LLM-driven work automation agent, rebuilt around a main-agent + sub-agent architecture and the Codex runtime.
 
-Currently supports automatic Linear issue triage — when a new issue is created, the agent collects context, calls an LLM for analysis, and writes triage results (priority, labels, assignee) back to Linear.
+## Current State
 
-## Features
+- Direct chat entrypoint backed by `MainAgent` and `CodexRunner`
+- Codex thread owns conversation context; Egg stores only session mapping and admin trace projection
+- React/Vite frontend for direct chat and admin
+- Admin UI for inspecting sessions, trace messages, tool calls, session source, and deleting sessions
+- Linear sub-agent boundary is scaffolded; Linear OAuth/Webhook/API write-back still needs to be rebuilt on the new architecture
 
-- **Agent Architecture**: Main agent + sub-agent pattern, extensible via `SubAgent` interface
-- **OAuth Authentication**: Linear OAuth 2.0 flow with automatic token refresh
-- **Webhook Receiver**: Listen for Linear webhooks, verify signatures via Linear SDK
-- **Issue Auto-Triage**: Collect issue context → LLM analysis → auto-set priority / labels / assignee
-
-## Quick Start
+## Commands
 
 ```bash
-git clone <repo-url> egg
-cd egg
-npm install
-cp .env.example .env
-# Edit .env with your credentials
-npm run dev
-
-# Expose local server via Tailscale Funnel (background mode)
-tailscale funnel --bg 3000
-# Verify funnel is running
-tailscale serve status
+npm run dev        # tsx --watch bootstrap.ts
+npm run dev:api    # tsx --watch bootstrap.ts
+npm run dev:web    # Vite frontend dev server
+npm run dev:all    # backend + frontend dev servers
+npm run build:web  # build React app into src/web/dist
+npm start          # tsx bootstrap.ts
+npm run typecheck  # backend + frontend TypeScript checks
+npm test           # no tests configured yet
 ```
 
-## Configuration
+## Environment
 
-All configuration is via environment variables (`.env` file supported):
+All configuration is via environment variables (`.env` is supported).
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `LINEAR_WEBHOOK_SECRET` | Yes | Linear webhook signing secret (HMAC-SHA256) |
-| `LINEAR_CLIENT_ID` | Yes | Linear OAuth app client ID |
-| `LINEAR_CLIENT_SECRET` | Yes | Linear OAuth app client secret |
-| `LINEAR_REDIRECT_URI` | Yes | OAuth redirect URI (must match Linear app config) |
-| `PORT` | No | Server port (default: `3000`) |
-| `LLM_PROVIDER` | No | LLM provider: `moonshot` or `claude` (default: `moonshot`) |
-| `LLM_BASE_URL` | No | LLM API base URL |
-| `LLM_MODEL` | No | LLM model name |
-| `LLM_API_KEY` | Yes | LLM API key |
+| `PORT` | No | Server port. Default: `3000` |
+| `AGENT_SESSIONS_ROOT` | No | Root folder for per-session storage. Default: `.data/sessions` |
+| `AGENT_SESSION_STORE_PATH` | No | Override session metadata storage root |
+| `SESSION_TRACE_STORE_PATH` | No | Override admin trace storage root |
+| `CODEX_MODEL` | No | Codex model override |
+| `CODEX_WORKING_DIRECTORY` | No | Working directory passed to Codex. Default: process cwd |
+| `CODEX_SANDBOX_MODE` | No | `read-only`, `workspace-write`, or `danger-full-access`. Default: `read-only` |
+| `CODEX_REASONING_EFFORT` | No | `minimal`, `low`, `medium`, `high`, or `xhigh` |
+| `CODEX_NETWORK_ACCESS` | No | Enable Codex network access. Default: `false` |
+| `CODEX_MAX_CONCURRENT_RUNS` | No | Global concurrent Codex run limit. Default: `2` |
 
-## Linear Setup
+Codex authentication is handled by the Codex runtime/CLI environment, not by the old Moonshot/Claude variables.
 
-1. Ensure your Linear account has **Admin** privileges (required to create OAuth applications)
-2. Create a Linear OAuth app at Linear Settings → API → OAuth applications
-2. Set the callback URL to `https://<your-host>/oauth/callback`
-3. Create a webhook at Linear Settings → API → Webhooks
-4. Set the webhook URL to `https://<your-host>/webhooks/linear`
-5. Select **Issues** events, copy the Signing Secret to `LINEAR_WEBHOOK_SECRET`
-6. Start the server and visit `/oauth/authorize` to complete OAuth
-
-## API Endpoints
+## Endpoints
 
 | Method | Path | Description |
 |--------|------|-------------|
 | `GET` | `/health` | Health check |
-| `GET` | `/status` | Auth status and agent ID |
-| `GET` | `/oauth/authorize` | Start Linear OAuth flow |
-| `GET` | `/oauth/callback` | OAuth callback handler |
-| `POST` | `/webhooks/linear` | Linear webhook receiver |
+| `GET` | `/chat` | Direct chat UI |
+| `GET` | `/admin` | Session/admin trace UI |
+| `POST` | `/api/direct-chat/sessions` | Create a direct chat session |
+| `POST` | `/api/direct-chat/messages` | Send a direct chat message |
+| `POST` | `/api/direct-chat/messages/stream` | Send a direct chat message with SSE streaming |
+| `GET` | `/api/admin/sessions` | List sessions |
+| `GET` | `/api/admin/sessions/:agentSessionId` | Inspect a session and trace |
+| `DELETE` | `/api/admin/sessions/:agentSessionId` | Delete a session |
 
 ## Project Structure
 
-```
-bootstrap.ts                    # Entry point: Hono server
+```text
+bootstrap.ts
+prompts/
+  main-agent.md                  # MainAgent prompt
 src/
   agent/
-    types.ts                    # SubAgent interface
-    registry.ts                 # Agent registry
-    main/                       # Main agent (reserved)
-    sub/
-      linear-triage/            # Sub-agent: Linear issue triage
-        index.ts                # SubAgent implementation
-        triage.ts               # Triage logic (context → LLM → apply)
-    tool/
-      fetch-trace.ts            # Langfuse trace tool
-      submit-triage.ts          # Triage result submission tool
-  infra/
-    linear/
-      client.ts                 # Linear API client wrapper
-      oauth.ts                  # OAuth 2.0 flow
-      webhook.ts                # Webhook signature verification
-  utils/
-    config.ts                   # Environment variable loading
-    logger.ts                   # File + console logger
-  routes/
-    health.ts                   # Health check routes
-    oauth.ts                    # OAuth routes
-    webhook.ts                  # Webhook routes
-prompts/
-  triage.md                     # Triage system prompt
+    main/                       # MainAgent
+    runtime/                    # CodexRunner, RunCoordinator
+    session/                    # AgentSessionStore, SessionTraceStore
+    sub/linear/                 # Linear sub-agent scaffold and workspace
+    tool/                       # Project tool contracts
+  integration/
+    direct-chat/                # Direct chat bridge
+    linear-agent/               # Linear envelope bridge scaffold
+  routes/                       # Hono API routes and built frontend serving
+  utils/                        # Config, logger
+  web/
+    src/                        # React/Vite frontend
 ```
 
-## Tech Stack
+## Development Notes
 
-- **[Hono](https://hono.dev/)** — HTTP server
-- **[@linear/sdk](https://developers.linear.app/docs/sdk/getting-started)** — Linear TypeScript SDK
-- **[@mariozechner/pi-agent-core](https://github.com/badlogic/pi-mono)** — Agent framework
-- **[@mariozechner/pi-ai](https://github.com/badlogic/pi-mono)** — LLM completion (OpenAI-compatible)
-- **TypeScript** + **tsx** — No build step required
-
-## Development
-
-```bash
-npm run dev        # Start with watch mode
-npm run typecheck  # Type check
-```
-
-## License
-
-Private
+- Direct chat is not a sub-agent; it is the main agent's default conversation path.
+- MainAgent prompt is stored in `prompts/main-agent.md`, not inline code.
+- Sub-agents represent domain capabilities and should be exposed to the main agent as tools.
+- Egg does not replay local chat records into Codex. Context recovery uses `codexThreadId`.
+- Admin trace files are projection data only: `.data/sessions/<agentSessionId>/trace.json`.
+- Chat streaming uses Server-Sent Events from `/api/direct-chat/messages/stream`.
+- `@assistant-ui/react` is installed as the candidate open-source chat UI layer; the current UI consumes Egg's custom SSE protocol directly until a dedicated runtime adapter is added.

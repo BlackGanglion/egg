@@ -1,23 +1,20 @@
 import type { Hono } from "hono";
-import {
-  getAccessToken,
-  type OAuthConfig,
-} from "../infra/linear/oauth";
-import { webhookStats } from "./webhook";
+import type { AgentRegistry } from "../agent/registry";
+import type { RunCoordinator } from "../agent/runtime/run-coordinator";
 
-export function registerHealthRoutes(app: Hono, oauthConfig: OAuthConfig) {
-  app.get("/health", (c) => c.json({ ok: true }));
+export function registerHealthRoutes(
+  app: Hono,
+  registry: AgentRegistry,
+  runCoordinator: RunCoordinator,
+): void {
+  app.get("/health", (c) => c.json({ ok: true, architecture: "v2" }));
 
-  app.get("/status", async (c) => {
-    const token = await getAccessToken(oauthConfig);
-    return c.json({
-      authorized: !!token,
-      agentId: token?.agentId ?? null,
-      webhook: {
-        count: webhookStats.count,
-        errors: webhookStats.errors,
-        lastReceivedAt: webhookStats.lastReceivedAt,
-      },
-    });
-  });
+  app.get("/status", (c) =>
+    c.json({
+      ok: true,
+      architecture: "v2",
+      agents: registry.describeCapabilities(),
+      activeRuns: runCoordinator.getActiveRunKeys(),
+    }),
+  );
 }

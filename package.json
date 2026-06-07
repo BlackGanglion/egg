@@ -4,26 +4,31 @@
   "type": "module",
   "scripts": {
     "dev": "tsx --watch bootstrap.ts",
+    "dev:api": "tsx --watch bootstrap.ts",
+    "dev:web": "vite --host 127.0.0.1",
+    "dev:all": "node scripts/dev-all.mjs",
+    "build:web": "vite build",
     "start": "tsx bootstrap.ts",
-    "typecheck": "tsc --noEmit",
-    "test": "vitest run",
-    "test:watch": "vitest",
-    "triage": "tsx scripts/triage-batch.ts"
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.web.json --noEmit",
+    "test": "node -e \"console.log('No tests configured')\""
   },
   "dependencies": {
+    "@assistant-ui/react": "^0.14.14",
     "@hono/node-server": "^1.14.0",
-    "@linear/sdk": "^80.0.0",
-    "@mariozechner/pi-agent-core": "^0.64.0",
-    "@mariozechner/pi-ai": "^0.64.0",
-    "@mariozechner/pi-coding-agent": "^0.64.0",
+    "@openai/codex-sdk": "^0.137.0",
     "dotenv": "^16.5.0",
-    "hono": "^4.7.0"
+    "hono": "^4.7.0",
+    "lucide-react": "^1.17.0",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
-    "prettier": "^3.8.1",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.2",
     "tsx": "^4.19.0",
     "typescript": "^5.9.0",
-    "vitest": "^4.1.2"
+    "vite": "^8.0.16"
   }
 }

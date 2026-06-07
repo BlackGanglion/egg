@@ -15,5 +15,5 @@
     "noUnusedParameters": true
   },
   "include": ["index.ts", "src/**/*.ts"],
-  "exclude": ["node_modules", "dist", "cc-origin", "docs", "test"]
+  "exclude": ["node_modules", "dist", "cc-origin", "docs", "test", "src/web"]
 }
