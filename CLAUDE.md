@@ -50,7 +50,7 @@ prompts/
 - 中文用于面向用户的文案（Linear 评论、工具描述）
 - 不要自动提交代码，每次需要提交时向用户确认
 - 遇到较大变化时，自动写入 history.md 记录优化内容
-- 项目架构变化时，同步更新 `cc-docs/design/` 下的设计文档
+- 项目架构变化时，同步更新 `docs/design/` 下的设计文档
 
 ## 测试
 
@@ -64,8 +64,8 @@ prompts/
 
 ## 参考文档
 
-- `cc-docs/design/` — 项目架构设计文档（architecture、data-flow、graphql-api、tools-spec）
-- `cc-docs/linear/` — Linear API 调用说明文档（auth、best-practices、communication、overview、session-api、session-lifecycle、signals、webhook-types）
+- `docs/design/` — 项目架构设计文档（architecture、data-flow、graphql-api、tools-spec）
+- `docs/linear/` — Linear API 调用说明文档（auth、best-practices、communication、overview、session-api、session-lifecycle、signals、webhook-types）
 
 ## 环境变量
 

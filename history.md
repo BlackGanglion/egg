@@ -1,5 +1,17 @@
 # 优化记录
 
+## 2026-06-07
+
+- **Linear 读写归属修正** — 更新 `docs/design/codex-sdk-migration-plan.md`，明确 Linear adapter/bridge 只处理 webhook envelope、session 映射和主 agent 入口，所有 Linear API 读取与写回都收敛到 `linear` 子 agent；`linear.issue.triage` 由主 agent 分发给 `linear` 子 agent 执行
+
+## 2026-06-03
+
+- **linear prompt 工作区自迭代方案** — 在 `docs/design/codex-sdk-migration-plan.md` 中补充子 agent workspace 规范，明确 `linear` 子 agent 的分诊 prompt 迁移到 `src/agent/sub/linear/workspace/prompts/triage.md`，普通分诊只读，明确的 prompt 迭代任务才允许在子 workspace 内修改 prompt 和 evals
+
+## 2026-06-02
+
+- **V2 Codex SDK 迁移计划** — 新增 `docs/design/codex-sdk-migration-plan.md`，明确将 agent runtime 从 pi/Moonshot/Kimi 迁移到 Codex TypeScript SDK，同时保留 Linear OAuth、Webhook、Issue 分诊写回和 AgentSession activity 链路，并补充对外只暴露主 agent、Linear/直接聊天双入口、通用 session store、并发隔离、Linear-Agent bridge、主 agent 分发、N 个子 agent 与子 agent 扩展规范
+
 ## 2026-04-04
 
 - **主子 Agent 架构重构** — 从单一用途的 Linear 分诊工具重构为可扩展的主子 agent 架构。引入 `SubAgent` 接口（`invoke()` + `asTool()`）和 `AgentRegistry`，子 agent 既可被 webhook 直接触发，也可作为主 agent 的 tool 调用

@@ -231,7 +231,7 @@ interface SubAgent {
 │       ├── health.ts
 │       ├── oauth.ts
 │       └── webhook.ts
-├── cc-docs/
+├── docs/
 │   ├── design/               # 设计文档
 │   └── linear/               # Linear API 参考文档
 └── log/                      # 运行日志（按日分文件）
