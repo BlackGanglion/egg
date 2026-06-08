@@ -78,7 +78,9 @@ export function AdminView() {
                   <strong>{session.agentSessionId}</strong>
                   <span>{session.externalSession.source} / {session.externalSession.scope}</span>
                   <span>{session.externalSession.externalSessionId}</span>
-                  <small>{session.messageCount} messages · {session.toolCallCount} tools</small>
+                  <small>
+                    {session.messageCount} messages · {session.agentCallCount} agent calls · {session.toolCallCount} tools
+                  </small>
                 </button>
                 <button
                   className="danger-icon"
@@ -125,7 +127,38 @@ export function AdminView() {
                 <dd>{activeSession.codexThreadId ?? "-"}</dd>
                 <dt>turns</dt>
                 <dd>{activeSession.turns.length}</dd>
+                <dt>agent calls</dt>
+                <dd>{trace?.agentCalls.length ?? 0}</dd>
               </dl>
+              <div className="trace-side-section">
+                <div className="section-label">Agent Calls</div>
+                <div className="tool-list">
+                  {(trace?.agentCalls ?? []).length ? (
+                    (trace?.agentCalls ?? []).map((call) => (
+                      <details className="tool-card" key={call.id}>
+                        <summary>
+                          <b>{call.parentAgent} -&gt; {call.childAgent}</b>
+                          <span>{call.status}</span>
+                        </summary>
+                        <pre>{JSON.stringify({
+                          mode: call.mode,
+                          taskType: call.taskType,
+                          turnId: call.turnId,
+                          startedAt: call.startedAt,
+                          completedAt: call.completedAt,
+                          input: call.input,
+                          output: call.output,
+                          error: call.error,
+                        }, null, 2)}</pre>
+                      </details>
+                    ))
+                  ) : (
+                    <div className="empty-inline">No agent calls</div>
+                  )}
+                </div>
+              </div>
+              <div className="trace-side-section">
+                <div className="section-label">Tool Calls</div>
               <div className="tool-list">
                 {(trace?.toolCalls ?? []).map((tool) => (
                   <details className="tool-card" key={tool.id}>
@@ -136,6 +169,7 @@ export function AdminView() {
                     <pre>{JSON.stringify({ input: tool.input, output: tool.output, error: tool.error }, null, 2)}</pre>
                   </details>
                 ))}
+              </div>
               </div>
             </aside>
           </div>

@@ -21,6 +21,7 @@ export function registerAdminRoutes(
           ...session,
           messageCount: trace?.messages.length ?? 0,
           toolCallCount: trace?.toolCalls.length ?? 0,
+          agentCallCount: trace?.agentCalls.length ?? 0,
           lastMessageAt: trace?.updatedAt,
         };
       }),

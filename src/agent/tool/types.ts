@@ -1,7 +1,8 @@
-import type { AgentTask } from "../types";
+import type { AgentTask, SubAgentDispatchContext } from "../types";
 
 export interface ToolExecutionContext {
   task: AgentTask;
+  dispatchContext?: SubAgentDispatchContext;
   signal?: AbortSignal;
   metadata?: Record<string, unknown>;
 }

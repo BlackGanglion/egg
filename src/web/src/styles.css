@@ -429,6 +429,20 @@ textarea:disabled {
   background: #fbfcfd;
 }
 
+.trace-side-section {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.trace-side-section .section-label {
+  padding: 0;
+}
+
+.trace-side-section .tool-list {
+  padding: 0;
+}
+
 .trace-message header {
   display: flex;
   justify-content: space-between;

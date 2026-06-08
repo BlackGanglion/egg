@@ -3,6 +3,7 @@ import { Bot, CircleStop, Plus, Send, User } from "lucide-react";
 import { createDirectChatSession, listDirectChatSessions } from "../api";
 import type {
   AgentResult,
+  AgentCall,
   DirectChatSession,
   DirectChatSessionDetail,
   SessionTrace,
@@ -56,6 +57,8 @@ type CodexToolCallPreview = {
   output?: unknown;
   error?: string;
 };
+
+type AgentCallPreview = Partial<AgentCall>;
 
 export function ChatView() {
   const [session, setSession] = useState<DirectChatSession | null>(null);
@@ -208,6 +211,16 @@ export function ChatView() {
             event?: { toolCall?: CodexToolCallPreview };
           };
           upsertRunEvent(eventFromToolCall(payload.event?.toolCall));
+          return;
+        }
+
+        if (
+          event === "agent_call.started" ||
+          event === "agent_call.completed" ||
+          event === "agent_call.failed"
+        ) {
+          const payload = data as { call?: AgentCallPreview };
+          upsertRunEvent(eventFromAgentCall(event, payload.call));
           return;
         }
 
@@ -387,7 +400,7 @@ export function ChatView() {
       <section className="chat-panel">
         <div className="panel-title">
           <span>Direct Chat</span>
-          <span className="muted">SSE streaming</span>
+          <span className="muted">{chatStatusLabel(status)}</span>
         </div>
         <div className="message-list">
           {messages.length ? (
@@ -516,6 +529,27 @@ export function ChatView() {
   }
 }
 
+function chatStatusLabel(status: string): string {
+  switch (status) {
+    case "running":
+      return "Streaming";
+    case "ready":
+      return "Ready";
+    case "loading":
+      return "Loading";
+    case "creating":
+      return "Creating";
+    case "cancelled":
+      return "Cancelled";
+    case "error":
+      return "Error";
+    case "no-session":
+      return "No session";
+    default:
+      return "Idle";
+  }
+}
+
 function traceToMessages(trace: SessionTrace | null): ChatMessage[] {
   return (trace?.messages ?? []).flatMap((message): ChatMessage[] => {
     if (message.role !== "user" && message.role !== "assistant") return [];
@@ -528,13 +562,26 @@ function traceToMessages(trace: SessionTrace | null): ChatMessage[] {
 }
 
 function traceToEvents(trace: SessionTrace | null): RunEvent[] {
-  return (trace?.toolCalls ?? []).map((toolCall) => ({
-    id: toolCall.id,
-    runtimeId: toolCall.id,
-    label: toolCall.name,
-    status: toolCall.status,
-    detail: formatStoredToolCall(toolCall),
-  }));
+  return [
+    ...(trace?.agentCalls ?? []).map((agentCall) => ({
+      id: agentCall.id,
+      runtimeId: agentCall.id,
+      label: `${agentCall.parentAgent} -> ${agentCall.childAgent}`,
+      status: agentCall.status,
+      detail: formatStoredAgentCall(agentCall),
+      time: agentCall.completedAt ?? agentCall.startedAt,
+    })),
+    ...(trace?.toolCalls ?? []).map((toolCall) => ({
+      id: toolCall.id,
+      runtimeId: toolCall.id,
+      label: toolCall.name,
+      status: toolCall.status,
+      detail: formatStoredToolCall(toolCall),
+      time: toolCall.completedAt ?? toolCall.startedAt,
+    })),
+  ]
+    .sort((a, b) => a.time.localeCompare(b.time))
+    .map(({ time: _time, ...event }) => event);
 }
 
 function emptyTrace(agentSessionId: string, timestamp = new Date().toISOString()): SessionTrace {
@@ -542,6 +589,7 @@ function emptyTrace(agentSessionId: string, timestamp = new Date().toISOString()
     agentSessionId,
     messages: [],
     toolCalls: [],
+    agentCalls: [],
     createdAt: timestamp,
     updatedAt: timestamp,
   };
@@ -588,6 +636,22 @@ function eventFromToolCall(toolCall: CodexToolCallPreview | undefined): RunEvent
     label: toolCall?.name ?? "tool call",
     status: toolCall?.status,
     detail: detailFromToolCall(toolCall),
+  };
+}
+
+function eventFromAgentCall(
+  eventName: string,
+  call: AgentCallPreview | undefined,
+): RunEvent {
+  return {
+    id: crypto.randomUUID(),
+    runtimeId: call?.id,
+    label:
+      call?.parentAgent && call.childAgent
+        ? `${call.parentAgent} -> ${call.childAgent}`
+        : "agent call",
+    status: call?.status ?? eventName.slice("agent_call.".length),
+    detail: detailFromAgentCall(call),
   };
 }
 
@@ -677,11 +741,33 @@ function detailFromToolCall(toolCall: CodexToolCallPreview | undefined): string 
   ]);
 }
 
+function detailFromAgentCall(call: AgentCallPreview | undefined): string | undefined {
+  if (!call) return undefined;
+
+  return compactLines([
+    call.mode ? `mode: ${call.mode}` : undefined,
+    call.taskType ? `task: ${call.taskType}` : undefined,
+    call.input === undefined ? undefined : `input:\n${formatUnknown(call.input)}`,
+    call.output === undefined ? undefined : `output:\n${formatUnknown(call.output)}`,
+    call.error ? `error:\n${call.error}` : undefined,
+  ]);
+}
+
 function formatStoredToolCall(toolCall: ToolCall): string | undefined {
   return compactLines([
     toolCall.input === undefined ? undefined : `input:\n${formatUnknown(toolCall.input)}`,
     toolCall.output === undefined ? undefined : `output:\n${formatUnknown(toolCall.output)}`,
     toolCall.error ? `error:\n${toolCall.error}` : undefined,
+  ]);
+}
+
+function formatStoredAgentCall(agentCall: AgentCall): string | undefined {
+  return compactLines([
+    `mode: ${agentCall.mode}`,
+    `task: ${agentCall.taskType}`,
+    agentCall.input === undefined ? undefined : `input:\n${formatUnknown(agentCall.input)}`,
+    agentCall.output === undefined ? undefined : `output:\n${formatUnknown(agentCall.output)}`,
+    agentCall.error ? `error:\n${agentCall.error}` : undefined,
   ]);
 }
 

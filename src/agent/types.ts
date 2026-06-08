@@ -1,3 +1,5 @@
+import type { EggTool } from "./tool/types";
+
 export type AgentTaskType =
   | "linear.issue.triage"
   | "linear.session.prompt"
@@ -64,11 +66,18 @@ export interface AgentDispatchContext {
   metadata?: Record<string, unknown>;
 }
 
+export interface SubAgentDispatchContext
+  extends Omit<AgentDispatchContext, "codexThreadId"> {
+  subAgentName?: string;
+}
+
 export type WorkspaceAccess = "read-only" | "workspace-write" | "danger-full-access";
 
 export interface SubAgentWorkspace {
   workspacePath: string;
   promptPath?: string;
+  stablePromptPath?: string;
+  mutablePromptPath?: string;
   evalsPath?: string;
   notesPath?: string;
   access: WorkspaceAccess;
@@ -80,5 +89,6 @@ export interface SubAgent {
   capabilities: string[];
   workspace?: SubAgentWorkspace;
   canHandle(task: AgentTask): boolean;
-  invoke(task: AgentTask, context: AgentDispatchContext): Promise<AgentResult>;
+  asTool(): EggTool;
+  invoke(task: AgentTask, context: SubAgentDispatchContext): Promise<AgentResult>;
 }

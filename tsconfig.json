@@ -14,6 +14,6 @@
     "noUnusedLocals": true,
     "noUnusedParameters": true
   },
-  "include": ["index.ts", "src/**/*.ts"],
+  "include": ["index.ts", "bootstrap.ts", "src/**/*.ts"],
   "exclude": ["node_modules", "dist", "cc-origin", "docs", "test", "src/web"]
 }

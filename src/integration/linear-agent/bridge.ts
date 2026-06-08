@@ -36,7 +36,6 @@ export class LinearAgentBridge {
       this.mainAgent.dispatch(task, {
         externalSession,
         agentSessionId: session.agentSessionId,
-        codexThreadId: session.codexThreadId,
         signal: run.signal,
       }),
     );
@@ -82,7 +81,6 @@ export class LinearAgentBridge {
       this.mainAgent.dispatch(task, {
         externalSession,
         agentSessionId: session.agentSessionId,
-        codexThreadId: session.codexThreadId,
         signal: run.signal,
       }),
     );

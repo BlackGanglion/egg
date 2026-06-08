@@ -8,8 +8,15 @@ export interface AppConfig {
   port: number;
   agentSessionStorePath: string;
   sessionTraceStorePath: string;
+  linearAccessToken?: string;
+  linearClientId?: string;
+  linearClientSecret?: string;
+  linearTokenStorePath: string;
   codexMaxConcurrentRuns: number;
   codexModel?: string;
+  codexSourceHome?: string;
+  codexRuntimeHome: string;
+  codexAllowedPlugins: string[];
   codexWorkingDirectory: string;
   codexSandboxMode: SandboxMode;
   codexReasoningEffort?: ModelReasoningEffort;
@@ -27,8 +34,24 @@ export function loadConfig(): AppConfig {
       process.env["SESSION_TRACE_STORE_PATH"] ??
       process.env["CHAT_CONTEXT_STORE_PATH"] ??
       sessionsRoot,
+    linearAccessToken: optionalString(process.env["LINEAR_ACCESS_TOKEN"]),
+    linearClientId: optionalString(process.env["LINEAR_CLIENT_ID"]),
+    linearClientSecret: optionalString(process.env["LINEAR_CLIENT_SECRET"]),
+    linearTokenStorePath:
+      optionalString(process.env["LINEAR_TOKEN_STORE_PATH"]) ??
+      optionalString(process.env["TOKEN_STORE_PATH"]) ??
+      ".data/oauth-token.json",
     codexMaxConcurrentRuns: parseInt(process.env["CODEX_MAX_CONCURRENT_RUNS"] ?? "2", 10),
     codexModel: optionalString(process.env["CODEX_MODEL"]),
+    codexSourceHome:
+      optionalString(process.env["CODEX_SOURCE_HOME"]) ??
+      optionalString(process.env["CODEX_HOME"]),
+    codexRuntimeHome:
+      optionalString(process.env["CODEX_RUNTIME_HOME"]) ?? ".data/codex-home",
+    codexAllowedPlugins: parseStringList(
+      process.env["CODEX_ALLOWED_PLUGINS"],
+      [],
+    ),
     codexWorkingDirectory:
       optionalString(process.env["CODEX_WORKING_DIRECTORY"]) ?? process.cwd(),
     codexSandboxMode: parseSandboxMode(
@@ -55,6 +78,17 @@ function parseBoolean(value: string | undefined, fallback: boolean): boolean {
   if (["1", "true", "yes", "on"].includes(normalized)) return true;
   if (["0", "false", "no", "off"].includes(normalized)) return false;
   return fallback;
+}
+
+function parseStringList(
+  value: string | undefined,
+  fallback: string[],
+): string[] {
+  const parsed = value
+    ?.split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+  return parsed && parsed.length > 0 ? parsed : fallback;
 }
 
 function parseSandboxMode(value: string | undefined): SandboxMode {

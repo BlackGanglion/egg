@@ -36,6 +36,9 @@ All configuration is via environment variables (`.env` is supported).
 | `AGENT_SESSION_STORE_PATH` | No | Override session metadata storage root |
 | `SESSION_TRACE_STORE_PATH` | No | Override admin trace storage root |
 | `CODEX_MODEL` | No | Codex model override |
+| `CODEX_SOURCE_HOME` | No | Source Codex home used for auth/config/plugin cache. Default: current `CODEX_HOME` or `~/.codex` |
+| `CODEX_RUNTIME_HOME` | No | Isolated Codex home generated for Egg runtime. Default: `.data/codex-home` |
+| `CODEX_ALLOWED_PLUGINS` | No | Comma-separated Codex plugin allowlist for the Egg runtime. Default: empty, all Codex plugins removed |
 | `CODEX_WORKING_DIRECTORY` | No | Working directory passed to Codex. Default: process cwd |
 | `CODEX_SANDBOX_MODE` | No | `read-only`, `workspace-write`, or `danger-full-access`. Default: `read-only` |
 | `CODEX_REASONING_EFFORT` | No | `minimal`, `low`, `medium`, `high`, or `xhigh` |

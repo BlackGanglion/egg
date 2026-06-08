@@ -4,6 +4,13 @@ import { join } from "node:path";
 
 export type TraceMessageRole = "user" | "assistant" | "system";
 export type ToolCallStatus = "started" | "completed" | "failed";
+export type AgentCallStatus =
+  | "started"
+  | "completed"
+  | "failed"
+  | "skipped"
+  | "needs_input";
+export type AgentCallMode = "main-dispatch" | "tool-decision";
 
 export interface TraceMessageRecord {
   id: string;
@@ -25,10 +32,26 @@ export interface ToolCallRecord {
   turnId?: string;
 }
 
+export interface AgentCallRecord {
+  id: string;
+  parentAgent: string;
+  childAgent: string;
+  mode: AgentCallMode;
+  status: AgentCallStatus;
+  taskType: string;
+  input?: unknown;
+  output?: unknown;
+  error?: string;
+  startedAt: string;
+  completedAt?: string;
+  turnId?: string;
+}
+
 export interface SessionTraceRecord {
   agentSessionId: string;
   messages: TraceMessageRecord[];
   toolCalls: ToolCallRecord[];
+  agentCalls: AgentCallRecord[];
   createdAt: string;
   updatedAt: string;
 }
@@ -50,6 +73,7 @@ export class SessionTraceStore {
       agentSessionId,
       messages: [],
       toolCalls: [],
+      agentCalls: [],
       createdAt: now,
       updatedAt: now,
     };
@@ -106,6 +130,55 @@ export class SessionTraceStore {
     return toolCall;
   }
 
+  async startAgentCall(input: {
+    agentSessionId: string;
+    parentAgent: string;
+    childAgent: string;
+    mode: AgentCallMode;
+    taskType: string;
+    callInput?: unknown;
+    turnId?: string;
+  }): Promise<AgentCallRecord> {
+    const trace = await this.ensureSession(input.agentSessionId);
+    const now = new Date().toISOString();
+    const agentCall: AgentCallRecord = {
+      id: randomUUID(),
+      parentAgent: input.parentAgent,
+      childAgent: input.childAgent,
+      mode: input.mode,
+      status: "started",
+      taskType: input.taskType,
+      input: input.callInput,
+      turnId: input.turnId,
+      startedAt: now,
+    };
+    trace.agentCalls.push(agentCall);
+    trace.updatedAt = now;
+    await this.writeTrace(trace);
+    return agentCall;
+  }
+
+  async finishAgentCall(input: {
+    agentSessionId: string;
+    id: string;
+    status: Exclude<AgentCallStatus, "started">;
+    output?: unknown;
+    error?: string;
+  }): Promise<AgentCallRecord | undefined> {
+    const trace = await this.ensureSession(input.agentSessionId);
+    const agentCall = trace.agentCalls.find((call) => call.id === input.id);
+    if (!agentCall) return undefined;
+
+    const now = new Date().toISOString();
+    agentCall.status = input.status;
+    agentCall.output = input.output;
+    agentCall.error = input.error;
+    agentCall.completedAt = now;
+    trace.updatedAt = now;
+    await this.writeTrace(trace);
+    return agentCall;
+  }
+
   async list(): Promise<SessionTraceRecord[]> {
     await this.load();
     return [...this.traces.values()].map((trace) => this.clone(trace));
@@ -129,6 +202,7 @@ export class SessionTraceStore {
       ...trace,
       messages: [...trace.messages],
       toolCalls: [...trace.toolCalls],
+      agentCalls: [...trace.agentCalls],
     };
   }
 
@@ -155,7 +229,7 @@ export class SessionTraceStore {
     for (const entry of entries) {
       try {
         const raw = await readFile(this.traceFile(entry), "utf8");
-        const trace = JSON.parse(raw) as SessionTraceRecord;
+        const trace = normalizeTrace(JSON.parse(raw) as SessionTraceRecord);
         this.traces.set(trace.agentSessionId, trace);
       } catch (err: unknown) {
         if (err instanceof Error && "code" in err && err.code === "ENOENT") continue;
@@ -172,4 +246,13 @@ export class SessionTraceStore {
       "utf8",
     );
   }
+}
+
+function normalizeTrace(trace: SessionTraceRecord): SessionTraceRecord {
+  return {
+    ...trace,
+    messages: trace.messages ?? [],
+    toolCalls: trace.toolCalls ?? [],
+    agentCalls: trace.agentCalls ?? [],
+  };
 }

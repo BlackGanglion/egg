@@ -13,6 +13,7 @@ export interface AgentResult {
     codexThreadId?: string;
     conversationId?: string;
     channel?: string;
+    [key: string]: unknown;
   };
 }
 
@@ -34,6 +35,7 @@ export interface AdminSession {
   updatedAt: string;
   messageCount: number;
   toolCallCount: number;
+  agentCallCount: number;
   lastMessageAt?: string;
 }
 
@@ -57,10 +59,26 @@ export interface ToolCall {
   turnId?: string;
 }
 
+export interface AgentCall {
+  id: string;
+  parentAgent: string;
+  childAgent: string;
+  mode: "main-dispatch" | "tool-decision";
+  status: "started" | "completed" | "failed" | "skipped" | "needs_input";
+  taskType: string;
+  input?: unknown;
+  output?: unknown;
+  error?: string;
+  startedAt: string;
+  completedAt?: string;
+  turnId?: string;
+}
+
 export interface SessionTrace {
   agentSessionId: string;
   messages: TraceMessage[];
   toolCalls: ToolCall[];
+  agentCalls: AgentCall[];
   createdAt: string;
   updatedAt: string;
 }

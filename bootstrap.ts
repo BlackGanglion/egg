@@ -7,8 +7,10 @@ import { MainAgent } from "./src/agent/main";
 import { AgentSessionStore } from "./src/agent/session/session-store";
 import { SessionTraceStore } from "./src/agent/session/session-trace-store";
 import { CodexRunner } from "./src/agent/runtime/codex-runner";
+import { prepareCodexRuntimeHome } from "./src/agent/runtime/codex-home";
 import { RunCoordinator } from "./src/agent/runtime/run-coordinator";
 import { LinearSubAgent } from "./src/agent/sub/linear";
+import { LinearApiClient } from "./src/infra/linear/linear-api-client";
 import { LinearAgentBridge } from "./src/integration/linear-agent/bridge";
 import type {
   LinearAgentSessionEnvelope,
@@ -27,14 +29,37 @@ const logger = createLogger();
 const registry = new AgentRegistry();
 const sessionStore = new AgentSessionStore(config.agentSessionStorePath);
 const sessionTraceStore = new SessionTraceStore(config.sessionTraceStorePath);
+const codexRuntimeHome = await prepareCodexRuntimeHome({
+  runtimeHome: config.codexRuntimeHome,
+  sourceHome: config.codexSourceHome,
+  allowedPlugins: config.codexAllowedPlugins,
+});
 const codexRunner = new CodexRunner({
+  codexOptions: {
+    env: codexRuntimeHome.env,
+  },
   model: config.codexModel,
   workingDirectory: config.codexWorkingDirectory,
   sandboxMode: config.codexSandboxMode,
   modelReasoningEffort: config.codexReasoningEffort,
   networkAccessEnabled: config.codexNetworkAccessEnabled,
 });
-registry.register(new LinearSubAgent());
+const linearApiClient = new LinearApiClient({
+  accessToken: config.linearAccessToken,
+  clientId: config.linearClientId,
+  clientSecret: config.linearClientSecret,
+  tokenStorePath: config.linearTokenStorePath,
+});
+registry.register(
+  new LinearSubAgent({
+    codexRunner,
+    sessionTraceStore,
+    tools: {
+      issueReader: linearApiClient,
+      issueWriter: linearApiClient,
+    },
+  }),
+);
 
 const mainAgent = new MainAgent(registry, {
   sessionTraceStore,
@@ -75,5 +100,8 @@ app.post("/integrations/linear/sessions", async (c) => {
 });
 
 serve({ fetch: app.fetch, port: config.port }, () => {
+  logger.info(
+    `Codex runtime home: ${codexRuntimeHome.homePath}; allowed plugins: ${codexRuntimeHome.allowedPlugins.join(", ") || "(none)"}`,
+  );
   logger.info(`egg v2 scaffold listening on http://localhost:${config.port}`);
 });
