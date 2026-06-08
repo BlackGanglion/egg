@@ -1,6 +1,10 @@
 import { describe, it, expect, vi } from "vitest";
-import { parseIdentifier, shouldSkipNewIssue } from "../src/routes/webhook";
-import { IssueTriage, type LLMConfig } from "../src/agent/sub/linear-triage/triage";
+import { shouldSkipNewIssue } from "../src/routes/webhook";
+import { parseIssueIdentifier } from "../src/infra/linear/identifier";
+import {
+  IssueTriage,
+  type LLMConfig,
+} from "../src/agent/sub/linear-triage/triage";
 import type { LinearApiClient } from "../src/infra/linear/client";
 import type { Logger } from "../src/utils/logger";
 
@@ -22,20 +26,23 @@ const DUMMY_LLM_CONFIG: LLMConfig = {
   apiKey: "unused",
 };
 
-// --- parseIdentifier ---
+// --- parseIssueIdentifier ---
 
-describe("parseIdentifier", () => {
+describe("parseIssueIdentifier", () => {
   it("parses valid identifiers", () => {
-    expect(parseIdentifier("MOV-6")).toEqual({ prefix: "MOV", number: 6 });
-    expect(parseIdentifier("ABC-12345")).toEqual({ prefix: "ABC", number: 12345 });
+    expect(parseIssueIdentifier("MOV-6")).toEqual({ prefix: "MOV", number: 6 });
+    expect(parseIssueIdentifier("ABC-12345")).toEqual({
+      prefix: "ABC",
+      number: 12345,
+    });
   });
 
   it("returns null for invalid identifiers", () => {
-    expect(parseIdentifier("mov-6")).toBeNull();
-    expect(parseIdentifier("MOV6")).toBeNull();
-    expect(parseIdentifier("MOV-")).toBeNull();
-    expect(parseIdentifier("")).toBeNull();
-    expect(parseIdentifier("MOV-6-extra")).toBeNull();
+    expect(parseIssueIdentifier("mov-6")).toBeNull();
+    expect(parseIssueIdentifier("MOV6")).toBeNull();
+    expect(parseIssueIdentifier("MOV-")).toBeNull();
+    expect(parseIssueIdentifier("")).toBeNull();
+    expect(parseIssueIdentifier("MOV-6-extra")).toBeNull();
   });
 });
 
@@ -199,7 +206,12 @@ describe("IssueTriage.collectContext", () => {
   it("returns null when issue has no team", async () => {
     const client = {
       getIssue: vi.fn(async () => ({
-        issue: { identifier: "MOV-1", title: "x", description: "", priority: 0 },
+        issue: {
+          identifier: "MOV-1",
+          title: "x",
+          description: "",
+          priority: 0,
+        },
         state: null,
         team: null,
         assignee: null,

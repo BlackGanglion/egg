@@ -1,5 +1,12 @@
 # 优化记录
 
+## 2026-06-08
+
+- **Issue 轮询补偿链路** — 新增 `LinearIssuePoller` 和独立命令 `npm run triage:poll`，每 1 分钟查询最近新增的 Linear issue，按创建时间窗口触发 `linear-triage` 子 agent，作为 webhook 漏投或延迟时的补偿链路，不影响默认 webhook server 启动链路
+- **Linear 时间窗口查询** — `LinearApiClient` 增加 `listIssuesCreatedBetween()`，支持 `createdAt.gte/lte`、分页数量和按创建时间升序排序
+- **轮询策略** — poller 固定 60 秒间隔、60 秒查询窗口、5 秒重叠窗口和每页 50 条翻页，并复用 `TRIAGE_MIN_ISSUE_NUMBER`；`linear-triage` 子 agent 增加同 issue 进程内 in-flight 去重，避免 webhook 与 poller 并发分诊同一个 issue
+- **设计文档同步** — 更新架构与数据流文档，补充 Poller → 子 Agent 链路、cursor 推进、重叠窗口和错误处理策略
+
 ## 2026-04-04
 
 - **主子 Agent 架构重构** — 从单一用途的 Linear 分诊工具重构为可扩展的主子 agent 架构。引入 `SubAgent` 接口（`invoke()` + `asTool()`）和 `AgentRegistry`，子 agent 既可被 webhook 直接触发，也可作为主 agent 的 tool 调用

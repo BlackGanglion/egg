@@ -11,6 +11,7 @@ Currently supports automatic Linear issue triage — when a new issue is created
 - **Agent Architecture**: Main agent + sub-agent pattern, extensible via `SubAgent` interface
 - **OAuth Authentication**: Linear OAuth 2.0 flow with automatic token refresh
 - **Webhook Receiver**: Listen for Linear webhooks, verify signatures via Linear SDK
+- **Issue Polling Compensation**: Optional standalone polling command to cover missed webhooks
 - **Issue Auto-Triage**: Collect issue context → LLM analysis → auto-set priority / labels / assignee
 
 ## Quick Start
@@ -22,6 +23,9 @@ npm install
 cp .env.example .env
 # Edit .env with your credentials
 npm run dev
+
+# Optional: run issue polling compensation in a separate process
+npm run triage:poll
 
 # Expose local server via Tailscale Funnel (background mode)
 tailscale funnel --bg 3000
@@ -69,6 +73,9 @@ All configuration is via environment variables (`.env` file supported):
 
 ```
 bootstrap.ts                    # Entry point: Hono server
+scripts/
+  triage-batch.ts               # Batch triage helper
+  triage-poll.ts                # Standalone issue polling entry point
 src/
   agent/
     types.ts                    # SubAgent interface
@@ -77,6 +84,7 @@ src/
     sub/
       linear-triage/            # Sub-agent: Linear issue triage
         index.ts                # SubAgent implementation
+        poller.ts               # Poller implementation used by the standalone command
         triage.ts               # Triage logic (context → LLM → apply)
     tool/
       fetch-trace.ts            # Langfuse trace tool
@@ -84,6 +92,7 @@ src/
   infra/
     linear/
       client.ts                 # Linear API client wrapper
+      identifier.ts             # Linear issue identifier parsing
       oauth.ts                  # OAuth 2.0 flow
       webhook.ts                # Webhook signature verification
   utils/
@@ -109,6 +118,7 @@ prompts/
 
 ```bash
 npm run dev        # Start with watch mode
+npm run triage:poll # Start standalone issue polling compensation
 npm run typecheck  # Type check
 ```
 

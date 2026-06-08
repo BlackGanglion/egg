@@ -1,4 +1,4 @@
-import { LinearClient } from "@linear/sdk";
+import { LinearClient, PaginationSortOrder, type Issue } from "@linear/sdk";
 
 export type TokenProvider = () => Promise<string>;
 
@@ -75,10 +75,46 @@ export class LinearApiClient {
   async getIssueIdByIdentifier(identifier: string): Promise<string | null> {
     const client = await this.ensure();
     const result = await client.issues({
-      filter: { number: { eq: parseInt(identifier.split("-")[1]!, 10) }, team: { key: { eq: identifier.split("-")[0]! } } },
+      filter: {
+        number: { eq: parseInt(identifier.split("-")[1]!, 10) },
+        team: { key: { eq: identifier.split("-")[0]! } },
+      },
       first: 1,
     });
     return result.nodes[0]?.id ?? null;
+  }
+
+  /** List issues created in a time window, ordered from oldest to newest. */
+  async listIssuesCreatedBetween(
+    since: Date,
+    until: Date,
+    pageSize = 50,
+  ): Promise<Issue[]> {
+    const client = await this.ensure();
+    const filter = {
+      createdAt: {
+        gte: since.toISOString(),
+        lte: until.toISOString(),
+      },
+    };
+    const issues: Issue[] = [];
+    let after: string | undefined;
+
+    while (true) {
+      const result = await client.issues({
+        filter,
+        first: pageSize,
+        includeArchived: false,
+        sort: [{ createdAt: { order: PaginationSortOrder.Ascending } }],
+        ...(after ? { after } : {}),
+      });
+
+      issues.push(...result.nodes);
+      if (!result.pageInfo.hasNextPage || !result.pageInfo.endCursor) break;
+      after = result.pageInfo.endCursor;
+    }
+
+    return issues;
   }
 
   /** Create a comment on an issue */

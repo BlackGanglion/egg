@@ -55,9 +55,7 @@ const llmConfig = {
 
 const registry = new AgentRegistry();
 
-registry.register(
-  createLinearTriageAgent(linearClient, llmConfig, logger),
-);
+registry.register(createLinearTriageAgent(linearClient, llmConfig, logger));
 
 // --- Main agent ---
 
@@ -69,7 +67,16 @@ const app = new Hono();
 
 registerHealthRoutes(app, oauthConfig);
 registerOAuthRoutes(app, oauthConfig, logger);
-registerWebhookRoutes(app, config.webhookSecret, oauthConfig, registry, linearClient, mainAgent, logger, config.triageMinIssueNumber);
+registerWebhookRoutes(
+  app,
+  config.webhookSecret,
+  oauthConfig,
+  registry,
+  linearClient,
+  mainAgent,
+  logger,
+  config.triageMinIssueNumber,
+);
 
 // --- Start ---
 

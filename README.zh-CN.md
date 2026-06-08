@@ -11,6 +11,7 @@ LLM 驱动的工作自动化 Agent，采用主子 agent 架构。
 - **Agent 架构**：主子 agent 模式，通过 `SubAgent` 接口扩展
 - **OAuth 认证**：Linear OAuth 2.0 流程，自动刷新 Token
 - **Webhook 接收**：监听 Linear Webhook，通过 Linear SDK 验证签名
+- **Issue 轮询补偿**：可选的独立轮询命令，用于补充分诊可能漏掉的 webhook
 - **Issue 自动分诊**：收集 Issue 上下文 → LLM 分析 → 自动设置优先级 / 标签 / 指派
 
 ## 快速开始
@@ -22,6 +23,9 @@ npm install
 cp .env.example .env
 # 编辑 .env 填入凭证
 npm run dev
+
+# 可选：在独立进程中启动 Issue 轮询补偿
+npm run triage:poll
 
 # 通过 Tailscale Funnel 暴露本地服务（后台模式）
 tailscale funnel --bg 3000
@@ -69,6 +73,9 @@ tailscale serve status
 
 ```
 bootstrap.ts                    # 入口：Hono 服务
+scripts/
+  triage-batch.ts               # 批量分诊辅助脚本
+  triage-poll.ts                # 独立 Issue 轮询入口
 src/
   agent/
     types.ts                    # SubAgent 接口
@@ -77,6 +84,7 @@ src/
     sub/
       linear-triage/            # 子 agent：Linear issue 分诊
         index.ts                # SubAgent 实现
+        poller.ts               # 独立命令使用的轮询实现
         triage.ts               # 分诊逻辑（上下文收集 → LLM → 应用结果）
     tool/
       fetch-trace.ts            # Langfuse trace 工具
@@ -84,6 +92,7 @@ src/
   infra/
     linear/
       client.ts                 # Linear API 客户端封装
+      identifier.ts             # Linear Issue identifier 解析
       oauth.ts                  # OAuth 2.0 流程
       webhook.ts                # Webhook 签名验证
   utils/
@@ -109,6 +118,7 @@ prompts/
 
 ```bash
 npm run dev        # 开发模式（带 watch）
+npm run triage:poll # 单独启动 Issue 轮询补偿
 npm run typecheck  # 类型检查
 ```
 

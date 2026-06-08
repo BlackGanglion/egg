@@ -82,7 +82,43 @@ Linear 发送 webhook: Issue.create
 - agent 自身 ID (agentId) 从成员列表中排除 — 避免分配给自己
 - 使用 `response_format: json_object` 确保 LLM 输出合法 JSON
 
-### 1.2 场景 B：@mention 代码分析
+### 1.2 场景 B：Issue 轮询补偿
+
+```
+npm run triage:poll
+    │
+    ▼
+scripts/triage-poll.ts
+    │
+    ▼
+LinearIssuePoller.start()
+    │ 每 1 分钟执行一次
+    ▼
+计算查询窗口
+lastCheckedAt - overlapMs  →  now
+    │
+    ▼
+LinearApiClient.listIssuesCreatedBetween()
+    │ filter: createdAt.gte/lte
+    │ sort: createdAt ascending
+    │ pageInfo.hasNextPage 翻页
+    ▼
+新增 Issue 列表
+    │
+    ├─ TRIAGE_MIN_ISSUE_NUMBER 命中 → 跳过
+    └─ 未命中 → linear-triage.invoke({ issueId })
+                │
+                ▼
+            IssueTriage.triageIssue()
+```
+
+**关键设计：**
+- 轮询链路独立于 webhook；只有单独执行 `npm run triage:poll` 时才运行，webhook 仍然实时处理 `Issue.create`
+- 查询窗口带 5 秒重叠，避免边界时间漏读
+- 若上一轮仍在执行，下一次 tick 跳过，cursor 不提前推进，后续继续覆盖未处理时间段
+- 真正分诊前仍由 `collectContext()` 检查 assignee，已分配 issue 不再调用 LLM
+
+### 1.3 场景 C：@mention 代码分析
 
 ```
 用户在 Linear issue 评论中 @mention Agent
@@ -166,6 +202,16 @@ t~5s-10min  LLM 多轮执行（可能调用 claude_code 多次）
 t=end       发评论回复
 ```
 
+### Issue Poller
+
+```
+t=0ms       独立 poller 进程触发 poll tick
+t~0-2s      Linear SDK 查询 createdAt 时间窗口内的新 issue
+t~2s        逐个 issue 执行编号过滤
+t~2s+       顺序调用 linear-triage 子 agent
+t=end       全部成功后推进 lastCheckedAt cursor
+```
+
 ---
 
 ## 3. 错误处理
@@ -176,6 +222,8 @@ t=end       发评论回复
 | OAuth token 过期 | 自动 refresh，失败则记录错误 | 否（仅日志） |
 | Issue 无 team | collectContext 返回 null，跳过 | 否 |
 | Issue 已完整分诊 | collectContext 返回 null，跳过 | 否 |
+| Poller 查询失败 | 记录 error，cursor 不推进，下一轮重试 | 否（仅日志） |
+| Poller 上轮未结束 | 当前 tick 跳过，cursor 不推进 | 否（仅日志） |
 | LLM 调用失败 | 记录 error 日志，不更新 issue | 否（仅日志） |
 | JSON 解析失败 | 记录 warn 日志，跳过 | 否（仅日志） |
 | Linear API 调用失败 | 异常冒泡，由上层 catch | 否（仅日志） |
@@ -227,7 +275,7 @@ interface IssueContext {
 /** Triage 结果 — LLM 返回的 JSON */
 interface TriageResult {
   assigneeId?: string;
-  priority?: number;     // 0=无, 1=紧急, 2=高, 3=中, 4=低
+  priority?: number; // 0=无, 1=紧急, 2=高, 3=中, 4=低
   labelIds?: string[];
   reason: string;
 }
@@ -240,7 +288,7 @@ interface OAuthConfig {
   clientId: string;
   clientSecret: string;
   redirectUri: string;
-  webhookSecret: string;     // 用于 CSRF state 生成
+  webhookSecret: string; // 用于 CSRF state 生成
   tokenStorePath: string;
 }
 
@@ -248,7 +296,7 @@ interface TokenSet {
   accessToken: string;
   refreshToken?: string;
   expiresAt: number;
-  agentId?: string;          // bot 的 Linear user ID
+  agentId?: string; // bot 的 Linear user ID
   createdAt: number;
   updatedAt: number;
 }
@@ -258,8 +306,8 @@ interface TokenSet {
 
 ```typescript
 interface LLMConfig {
-  baseUrl: string;    // OpenAI 兼容 API 地址
-  model: string;      // 模型名称
+  baseUrl: string; // OpenAI 兼容 API 地址
+  model: string; // 模型名称
   apiKey: string;
 }
 ```
@@ -269,7 +317,7 @@ interface LLMConfig {
 ```typescript
 interface MentionConfig {
   llmConfig: LLMConfig;
-  projectDir?: string;   // Claude Code 工作目录
+  projectDir?: string; // Claude Code 工作目录
 }
 
 // claude_code 工具定义

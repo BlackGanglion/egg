@@ -2,6 +2,7 @@ import type { Hono } from "hono";
 import { createWebhookHandler } from "../infra/linear/webhook";
 import { getAccessToken, type OAuthConfig } from "../infra/linear/oauth";
 import type { LinearApiClient } from "../infra/linear/client";
+import { parseIssueIdentifier } from "../infra/linear/identifier";
 import type { AgentRegistry } from "../agent/registry";
 import type { MainAgent } from "../agent/main";
 import type { Logger } from "../utils/logger";
@@ -16,12 +17,6 @@ export const webhookStats = {
   lastReceivedAt: null as string | null,
 };
 
-export function parseIdentifier(identifier: string): { prefix: string; number: number } | null {
-  const match = identifier.match(/^([A-Z]+)-(\d+)$/);
-  if (!match) return null;
-  return { prefix: match[1]!, number: parseInt(match[2]!, 10) };
-}
-
 /**
  * Decide whether a newly created issue should be skipped (not triaged).
  * Pure function — safe to unit-test without the webhook stack.
@@ -31,7 +26,7 @@ export function shouldSkipNewIssue(
   assigneeId: string | null | undefined,
   minIssueNumber: number,
 ): { skip: boolean; reason?: string } {
-  const parsed = parseIdentifier(identifier);
+  const parsed = parseIssueIdentifier(identifier);
   if (minIssueNumber > 0 && parsed && parsed.number < minIssueNumber) {
     return { skip: true, reason: `number below threshold ${minIssueNumber}` };
   }
@@ -58,17 +53,23 @@ export function registerWebhookRoutes(
     for (let n = from; n < to; n++) {
       if (triageMinIssueNumber > 0 && n < triageMinIssueNumber) continue;
       const identifier = `${prefix}-${n}`;
-      logger.warn(`[webhook-gap] Missed webhook for ${identifier}, fetching via API`);
+      logger.warn(
+        `[webhook-gap] Missed webhook for ${identifier}, fetching via API`,
+      );
       try {
         const issueId = await linearClient.getIssueIdByIdentifier(identifier);
         if (issueId) {
           logger.warn(`[webhook-gap] Recovering ${identifier} (id=${issueId})`);
           void triageAgent.invoke({ issueId }).catch((err: unknown) => {
             const msg = err instanceof Error ? err.message : String(err);
-            logger.error(`[webhook-gap] Triage failed for ${identifier}: ${msg}`);
+            logger.error(
+              `[webhook-gap] Triage failed for ${identifier}: ${msg}`,
+            );
           });
         } else {
-          logger.warn(`[webhook-gap] ${identifier} not found (may be deleted or private)`);
+          logger.warn(
+            `[webhook-gap] ${identifier} not found (may be deleted or private)`,
+          );
         }
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : String(err);
@@ -101,17 +102,21 @@ export function registerWebhookRoutes(
         }
 
         // Gap detection
-        const parsed = parseIdentifier(identifier);
+        const parsed = parseIssueIdentifier(identifier);
         if (parsed) {
           const lastNum = lastSeenNumber.get(parsed.prefix);
           if (lastNum !== undefined && parsed.number > lastNum + 1) {
             logger.warn(
               `[webhook-gap] Detected gap: last=${parsed.prefix}-${lastNum}, current=${identifier}, missing ${parsed.number - lastNum - 1} issue(s)`,
             );
-            void handleMissedIssues(parsed.prefix, lastNum + 1, parsed.number).catch((err: unknown) => {
-            const msg = err instanceof Error ? err.message : String(err);
-            logger.error(`[webhook-gap] handleMissedIssues failed: ${msg}`);
-          });
+            void handleMissedIssues(
+              parsed.prefix,
+              lastNum + 1,
+              parsed.number,
+            ).catch((err: unknown) => {
+              const msg = err instanceof Error ? err.message : String(err);
+              logger.error(`[webhook-gap] handleMissedIssues failed: ${msg}`);
+            });
           }
           lastSeenNumber.set(parsed.prefix, parsed.number);
         }

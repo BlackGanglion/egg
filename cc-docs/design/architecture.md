@@ -6,8 +6,9 @@
 ┌─────────────┐   HTTPS Webhook   ┌─────────┐   localhost   ┌──────────────────┐
 │   Linear    │ ────────────────→ │  Funnel  │ ───────────→ │  Local Mac       │
 │   (Cloud)   │                   │  (隧道)   │              │                  │
-│             │   @linear/sdk     │          │              │  Hono Server     │
-│             │ ←──────────────── │          │              │  (standalone)    │
+│             │                   │          │              │  Hono Server     │
+│             │   @linear/sdk     │          │              │  triage:poll CLI │
+│             │ ←────────────────────────────────────────── │  (standalone)    │
 └─────────────┘                   └─────────┘              └──────────────────┘
 ```
 
@@ -22,10 +23,12 @@
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                        Egg (Hono Server)                         │
+│                       Egg (Local Processes)                      │
 │                                                                 │
 │  ┌───────────────────────────────────────────────────────┐      │
-│  │ HTTP Layer (routes/)                                   │      │
+│  │ Hono Server Process (npm run dev / npm start)          │      │
+│  │                                                       │      │
+│  │ HTTP Layer (routes/)                                  │      │
 │  │ POST /webhooks/linear → 验签 → AgentRegistry → 子agent │      │
 │  │ GET  /oauth/authorize → 发起 OAuth                     │      │
 │  │ GET  /oauth/callback  → 换 token                       │      │
@@ -60,6 +63,12 @@
 │  │ Utils (utils/)                                         │      │
 │  │ config.ts — 环境变量加载                                │      │
 │  │ logger.ts — 文件 + 控制台日志                           │      │
+│  └───────────────────────────────────────────────────────┘      │
+│                                                                 │
+│  ┌───────────────────────────────────────────────────────┐      │
+│  │ Poller Process (npm run triage:poll)                  │      │
+│  │ scripts/triage-poll.ts → LinearIssuePoller            │      │
+│  │ 每分钟查询最近新增 issue → linear-triage 子 agent        │      │
 │  └───────────────────────────────────────────────────────┘      │
 └─────────────────────────────────────────────────────────────────┘
 ```
@@ -145,7 +154,24 @@ Linear Issue.create → Webhook → SDK 验签 → routes/webhook.ts
             → 更新 issue + 发评论
 ```
 
-### 4.2 SubAgent 接口
+### 4.2 Poller → 子 Agent
+
+```
+npm run triage:poll
+    → scripts/triage-poll.ts
+    → LinearIssuePoller.start()
+    → 每 60s 执行一次
+    → LinearApiClient.listIssuesCreatedBetween(lastCheckedAt, now)
+        → createdAt 时间窗口
+        → 按 createdAt 升序翻页返回最近新增 issue
+    → TRIAGE_MIN_ISSUE_NUMBER 过滤
+    → linear-triage.invoke({ issueId })
+        → IssueTriage.triageIssue()
+```
+
+Poller 仅在独立执行 `npm run triage:poll` 时启动，`bootstrap.ts` 和 webhook server 不会启动轮询。Poller 每 1 分钟查询一次最近 1 分钟内新增的 issue，并额外保留 5 秒重叠窗口，避免时间边界漏读。若上一轮分诊未完成，下一次 tick 会跳过，cursor 不提前推进；后续 tick 会继续覆盖未处理时间段。
+
+### 4.3 SubAgent 接口
 
 ```typescript
 interface SubAgent {
@@ -166,9 +192,11 @@ interface SubAgent {
 | 模块 | 文件 | 职责 |
 |------|------|------|
 | **服务入口** | `bootstrap.ts` | Hono 路由注册，创建 AgentRegistry，串联各模块 |
+| **轮询命令** | `scripts/triage-poll.ts` | 独立启动 Linear Issue 轮询补偿链路 |
 | **SubAgent 接口** | `src/agent/types.ts` | SubAgent、SubAgentResult 类型定义 |
 | **Agent 注册表** | `src/agent/registry.ts` | 注册/查找子 agent，转换为 tools |
 | **Linear Triage** | `src/agent/sub/linear-triage/` | 子 agent：Issue 自动分诊 |
+| **Linear Poller** | `src/agent/sub/linear-triage/poller.ts` | 定时查询最近新增 Issue 并触发分诊 |
 | **Agent 工具** | `src/agent/tool/` | fetch_trace、submit_triage_result |
 | **Linear 客户端** | `src/infra/linear/client.ts` | LinearClient 封装，token provider 模式 |
 | **OAuth** | `src/infra/linear/oauth.ts` | OAuth 2.0 完整流程 + token 自动刷新 |
@@ -196,7 +224,6 @@ interface SubAgent {
 | `LLM_MODEL` | 否 | LLM 模型名称 |
 | `PORT` | 否 | 服务端口（默认 3000） |
 | `TOKEN_STORE_PATH` | 否 | OAuth Token 存储路径（默认 `.data/oauth-token.json`） |
-
 ---
 
 ## 7. 目录结构
@@ -205,6 +232,9 @@ interface SubAgent {
 ├── bootstrap.ts              # 服务入口
 ├── package.json
 ├── tsconfig.json
+├── scripts/
+│   ├── triage-batch.ts        # 批量分诊辅助脚本
+│   └── triage-poll.ts         # 独立轮询入口
 ├── prompts/
 │   └── triage.md             # 分诊系统提示词
 ├── src/
@@ -215,6 +245,7 @@ interface SubAgent {
 │   │   ├── sub/
 │   │   │   └── linear-triage/
 │   │   │       ├── index.ts  # SubAgent 实现
+│   │   │       ├── poller.ts # 定时查询新增 issue
 │   │   │       └── triage.ts # 分诊逻辑
 │   │   └── tool/
 │   │       ├── fetch-trace.ts
@@ -222,6 +253,7 @@ interface SubAgent {
 │   ├── infra/
 │   │   └── linear/
 │   │       ├── client.ts     # Linear SDK 客户端
+│   │       ├── identifier.ts # Issue identifier 解析
 │   │       ├── oauth.ts      # OAuth 2.0
 │   │       └── webhook.ts    # Webhook 验签
 │   ├── utils/

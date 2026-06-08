@@ -11,7 +11,13 @@ export function createLinearTriageAgent(
   logger: Logger,
   excludeUserId?: string,
 ): SubAgent {
-  const triage = new IssueTriage(linearClient, llmConfig, logger, excludeUserId);
+  const triage = new IssueTriage(
+    linearClient,
+    llmConfig,
+    logger,
+    excludeUserId,
+  );
+  const runningIssueIds = new Set<string>();
 
   return {
     name: "linear-triage",
@@ -22,6 +28,15 @@ export function createLinearTriageAgent(
       if (typeof issueId !== "string") {
         return { success: false, message: "missing issueId" };
       }
+      if (runningIssueIds.has(issueId)) {
+        return {
+          success: false,
+          message: `Triage already running for ${issueId}`,
+          details: { alreadyRunning: true },
+        };
+      }
+
+      runningIssueIds.add(issueId);
       try {
         await triage.triageIssue(issueId);
         return { success: true, message: `Triaged issue ${issueId}` };
@@ -29,6 +44,8 @@ export function createLinearTriageAgent(
         const msg = describeError(err);
         logger.error(`[linear-triage] Failed to triage ${issueId}: ${msg}`);
         return { success: false, message: `Triage failed: ${msg}` };
+      } finally {
+        runningIssueIds.delete(issueId);
       }
     },
 
